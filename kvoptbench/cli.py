@@ -24,6 +24,27 @@ def validate_config_command(
     print(f"[green]OK[/green] {config} -> {parsed.experiment_id}")
 
 
+@app.command("endpoint-check")
+def endpoint_check_command(
+    config: Path = typer.Option(..., "--config", "-c", help="Experiment YAML config."),
+) -> None:
+    """Check whether a configured OpenAI-compatible endpoint is reachable."""
+    import asyncio
+
+    from kvoptbench.client.openai_compat import OpenAICompatClient
+
+    try:
+        parsed = validate_config(config)
+    except ConfigError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    health = asyncio.run(OpenAICompatClient(parsed).healthcheck())
+    if not health.ok:
+        print(f"[red]FAILED[/red] {health.url}: {health.error_message}")
+        raise typer.Exit(code=1)
+    models = ", ".join(health.model_ids) if health.model_ids else "models unavailable"
+    print(f"[green]OK[/green] {health.url} ({models})")
+
+
 @app.command("generate-workload")
 def generate_workload_command(
     profile: str = typer.Option(..., "--profile", "-p"),

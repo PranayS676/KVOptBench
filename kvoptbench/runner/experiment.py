@@ -11,7 +11,7 @@ from pathlib import Path
 from kvoptbench.client.openai_compat import OpenAICompatClient
 from kvoptbench.config import load_config
 from kvoptbench.evals.dispatch import evaluate_output
-from kvoptbench.schemas import RequestResult, WorkloadItem
+from kvoptbench.schemas import EndpointHealth, RequestResult, WorkloadItem
 
 
 def load_workload(path: str | Path) -> list[WorkloadItem]:
@@ -37,6 +37,20 @@ async def run_experiment(config_path: str | Path) -> Path:
     config.output_file.parent.mkdir(parents=True, exist_ok=True)
     run_id = f"{int(time.time())}-{config.experiment_id}"
     client = OpenAICompatClient(config)
+    endpoint_health = await client.healthcheck()
+    if not endpoint_health.ok:
+        results = [
+            _failed_healthcheck_result(
+                run_id=run_id,
+                item=item,
+                config=config,
+                endpoint_health=endpoint_health,
+            )
+            for item in items
+        ]
+        _write_results(config.output_file, results, requests_per_second=None)
+        return config.output_file
+
     semaphore = asyncio.Semaphore(config.concurrency)
     started = time.perf_counter()
 
@@ -87,6 +101,7 @@ async def run_experiment(config_path: str | Path) -> Path:
             missing_metrics=missing_metrics,
             metadata={
                 "config_metadata": config.metadata,
+                "endpoint_health": endpoint_health.model_dump(),
                 "quality_details": quality.details if quality else {},
             },
         )
@@ -94,12 +109,64 @@ async def run_experiment(config_path: str | Path) -> Path:
     results = await asyncio.gather(*(run_one(index, item) for index, item in enumerate(items)))
     elapsed = time.perf_counter() - started
     rps = len(results) / elapsed if elapsed > 0 else None
-    with config.output_file.open("w", encoding="utf-8") as handle:
-        for result in results:
-            if rps is not None:
-                result.requests_per_second = round(rps, 3)
-            handle.write(json.dumps(result.model_dump(), ensure_ascii=False) + "\n")
+    _write_results(config.output_file, results, requests_per_second=rps)
     return config.output_file
+
+
+def _write_results(
+    output_file: Path, results: list[RequestResult], requests_per_second: float | None
+) -> None:
+    with output_file.open("w", encoding="utf-8") as handle:
+        for result in results:
+            if requests_per_second is not None:
+                result.requests_per_second = round(requests_per_second, 3)
+            handle.write(json.dumps(result.model_dump(), ensure_ascii=False) + "\n")
+
+
+def _failed_healthcheck_result(
+    *,
+    run_id: str,
+    item: WorkloadItem,
+    config,
+    endpoint_health: EndpointHealth,
+) -> RequestResult:
+    return RequestResult(
+        run_id=run_id,
+        experiment_id=config.experiment_id,
+        official_run=config.official_run,
+        provider=config.provider,
+        engine=config.engine,
+        model_id=config.model_id,
+        strategy=config.strategy,
+        workload=item.workload,
+        task_id=item.task_id,
+        concurrency=config.concurrency,
+        request_rate=config.request_rate,
+        target_input_tokens=item.target_input_tokens,
+        target_output_tokens=item.target_output_tokens,
+        shared_prefix_tokens=item.shared_prefix_tokens,
+        success=False,
+        error_type="EndpointHealthcheckFailed",
+        error_message=endpoint_health.error_message or "endpoint health check failed",
+        missing_metrics=[
+            "ttft_ms",
+            "tpot_ms",
+            "itl_ms",
+            "e2e_latency_ms",
+            "engine_version",
+            "gpu_memory_used_gb",
+            "gpu_memory_peak_gb",
+            "gpu_type",
+            "gpu_count",
+            "cache_hit_rate",
+            "cache_miss_penalty_ms",
+        ],
+        metadata={
+            "config_metadata": config.metadata,
+            "endpoint_health": endpoint_health.model_dump(),
+            "quality_details": {},
+        },
+    )
 
 
 def _missing_metrics(response, metadata: dict) -> list[str]:

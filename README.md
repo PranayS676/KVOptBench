@@ -98,6 +98,40 @@ kvoptbench summarize --input results/raw --output results/summary.csv
 kvoptbench report --input results/summary.csv --output reports/mock_report.md
 ```
 
+## Real Endpoint Mode
+
+Milestone 2 can run against an existing OpenAI-compatible endpoint, including vLLM and SGLang servers that are already running. KVOptBench does not start, deploy, or manage those servers in this milestone.
+
+Public-safe example configs are included:
+
+- `examples/vllm_openai_compatible_config.yaml`
+- `examples/sglang_openai_compatible_config.yaml`
+
+Before running, edit the example config for your local endpoint:
+
+- `base_url`
+- `model_id`
+- `api_key_env`, only if the endpoint requires auth
+- `workload_file`
+- `output_file`
+
+Then validate and check the endpoint:
+
+```bash
+kvoptbench validate-config --config examples/vllm_openai_compatible_config.yaml
+kvoptbench endpoint-check --config examples/vllm_openai_compatible_config.yaml
+```
+
+Run the benchmark with the same runner:
+
+```bash
+kvoptbench run --config examples/vllm_openai_compatible_config.yaml
+kvoptbench summarize --input results/raw --output results/summary.csv
+kvoptbench report --input results/summary.csv --output reports/real_endpoint_report.md
+```
+
+Real endpoint mode records unavailable engine/GPU metrics as `null` and lists them in `missing_metrics`. Do not treat missing telemetry as zero.
+
 ## License
 
 MIT License.
