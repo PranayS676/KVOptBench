@@ -62,6 +62,16 @@ def _vllm_profile() -> EngineProfile:
                 notes=["Replace <draft-model> with a compatible draft model before use."],
                 placeholder=True,
             ),
+            "prefill_decode_disaggregation": EngineStrategyProfile(
+                name="prefill_decode_disaggregation",
+                description="vLLM prefill/decode disaggregation preview.",
+                command_template=base + " <prefill-decode-disaggregation-flags>",
+                notes=[
+                    "Replace <prefill-decode-disaggregation-flags> with the supported "
+                    "multi-process or disaggregated serving setup for the installed vLLM version.",
+                ],
+                placeholder=True,
+            ),
         },
         notes=["Command previews assume an OpenAI-compatible server endpoint."],
     )
@@ -113,6 +123,16 @@ def _sglang_profile() -> EngineProfile:
                 description="SGLang speculative decoding preview.",
                 command_template=base + " --speculative-algorithm EAGLE --speculative-draft-model-path <draft-model>",
                 notes=["Replace <draft-model> and algorithm flags with a supported SGLang setup."],
+                placeholder=True,
+            ),
+            "prefill_decode_disaggregation": EngineStrategyProfile(
+                name="prefill_decode_disaggregation",
+                description="SGLang prefill/decode disaggregation preview.",
+                command_template=base + " <prefill-decode-disaggregation-flags>",
+                notes=[
+                    "Replace <prefill-decode-disaggregation-flags> with the supported "
+                    "multi-process or disaggregated serving setup for the installed SGLang version.",
+                ],
                 placeholder=True,
             ),
         },

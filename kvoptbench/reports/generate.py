@@ -25,6 +25,8 @@ def generate_report(
     long_context_input_path: str | Path | None = None,
     kv_quant_input_path: str | Path | None = None,
     kv_offload_input_path: str | Path | None = None,
+    spec_decoding_input_path: str | Path | None = None,
+    disagg_input_path: str | Path | None = None,
 ) -> Path:
     """Generate a markdown report from a summary CSV."""
     input_path = Path(input_path)
@@ -38,6 +40,8 @@ def generate_report(
     long_context_frame = _read_long_context(long_context_input_path)
     kv_quant_frame = _read_kv_quantization(kv_quant_input_path)
     kv_offload_frame = _read_kv_offload(kv_offload_input_path)
+    spec_decoding_frame = _read_speculative_decoding(spec_decoding_input_path)
+    disagg_frame = _read_disaggregation(disagg_input_path)
 
     total_requests = int(frame["requests"].sum()) if "requests" in frame else 0
     avg_success = frame["success_rate"].mean() if "success_rate" in frame else None
@@ -156,6 +160,8 @@ def generate_report(
     _append_long_context(lines, long_context_frame)
     _append_kv_quantization(lines, kv_quant_frame)
     _append_kv_offload(lines, kv_offload_frame)
+    _append_speculative_decoding(lines, spec_decoding_frame)
+    _append_disaggregation(lines, disagg_frame)
 
     lines.extend(["", "## Cache Interpretation", ""])
     if "cache_interpretation" in frame.columns:
@@ -259,6 +265,28 @@ def _read_kv_offload(kv_offload_input_path: str | Path | None) -> pd.DataFrame |
     if kv_offload_frame.empty:
         return pd.DataFrame()
     return kv_offload_frame
+
+
+def _read_speculative_decoding(
+    spec_decoding_input_path: str | Path | None,
+) -> pd.DataFrame | None:
+    if spec_decoding_input_path is None:
+        return None
+    spec_decoding_path = Path(spec_decoding_input_path)
+    spec_decoding_frame = pd.read_csv(spec_decoding_path)
+    if spec_decoding_frame.empty:
+        return pd.DataFrame()
+    return spec_decoding_frame
+
+
+def _read_disaggregation(disagg_input_path: str | Path | None) -> pd.DataFrame | None:
+    if disagg_input_path is None:
+        return None
+    disagg_path = Path(disagg_input_path)
+    disagg_frame = pd.read_csv(disagg_path)
+    if disagg_frame.empty:
+        return pd.DataFrame()
+    return disagg_frame
 
 
 def _append_cache_comparison(lines: list[str], cache_frame: pd.DataFrame | None) -> None:
@@ -498,6 +526,110 @@ def _append_kv_offload(lines: list[str], kv_offload_frame: pd.DataFrame | None) 
         )
 
 
+def _append_speculative_decoding(
+    lines: list[str], spec_decoding_frame: pd.DataFrame | None
+) -> None:
+    lines.extend(["", "## Speculative Decoding", ""])
+    if spec_decoding_frame is None:
+        lines.append("No speculative decoding CSV was provided.")
+        return
+    if spec_decoding_frame.empty:
+        lines.append("No speculative decoding rows were available.")
+        return
+
+    interpretations = sorted(
+        {
+            str(value)
+            for value in spec_decoding_frame.get(
+                "speculative_decoding_interpretation", pd.Series(dtype=str)
+            ).dropna()
+            if str(value).strip()
+        }
+    )
+    if interpretations:
+        lines.append(
+            "Observed speculative decoding interpretations: "
+            + ", ".join(f"`{interpretation}`" for interpretation in interpretations)
+            + "."
+        )
+    else:
+        lines.append("No speculative decoding interpretations were available.")
+    lines.extend(
+        [
+            "Mock speculative decoding timings validate benchmark wiring only; use real endpoint runs for engine claims.",
+            "",
+            "| engine | workload | output bucket | baseline | speculative | "
+            "TTFT delta % | E2E delta % | throughput delta % | quality delta | interpretation |",
+            "|---|---|---:|---|---|---:|---:|---:|---:|---|",
+        ]
+    )
+    for _, row in spec_decoding_frame.iterrows():
+        lines.append(
+            f"| {row.get('engine', 'unknown')} | {row.get('workload', 'unknown')} | "
+            f"{_fmt(row.get('output_token_bucket'))} | "
+            f"{row.get('baseline_strategy', 'baseline')} | "
+            f"{row.get('speculative_strategy', 'unknown')} | "
+            f"{_fmt(row.get('ttft_delta_pct'))} | "
+            f"{_fmt(row.get('e2e_delta_pct'))} | "
+            f"{_fmt(row.get('throughput_delta_pct'))} | "
+            f"{_fmt(row.get('quality_delta'))} | "
+            f"{row.get('speculative_decoding_interpretation', 'unknown')} |"
+        )
+
+
+def _append_disaggregation(lines: list[str], disagg_frame: pd.DataFrame | None) -> None:
+    lines.extend(["", "## Prefill/Decode Disaggregation", ""])
+    if disagg_frame is None:
+        lines.append("No disaggregation CSV was provided.")
+        return
+    if disagg_frame.empty:
+        lines.append("No disaggregation rows were available.")
+        return
+
+    interpretations = sorted(
+        {
+            str(value)
+            for value in disagg_frame.get(
+                "disaggregation_interpretation", pd.Series(dtype=str)
+            ).dropna()
+            if str(value).strip()
+        }
+    )
+    if interpretations:
+        lines.append(
+            "Observed disaggregation interpretations: "
+            + ", ".join(f"`{interpretation}`" for interpretation in interpretations)
+            + "."
+        )
+    else:
+        lines.append("No disaggregation interpretations were available.")
+    lines.extend(
+        [
+            "Mock disaggregation timings validate benchmark wiring only; use real endpoint runs for engine claims.",
+            "",
+            "| engine | workload | input bucket | output bucket | baseline | disaggregated | "
+            "TTFT delta % | TPOT delta % | ITL delta % | E2E delta % | "
+            "throughput delta % | quality delta | interpretation |",
+            "|---|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---|",
+        ]
+    )
+    for _, row in disagg_frame.iterrows():
+        lines.append(
+            f"| {row.get('engine', 'unknown')} | {row.get('workload', 'unknown')} | "
+            f"{_fmt(row.get('input_token_bucket'))} | "
+            f"{_fmt(row.get('output_token_bucket'))} | "
+            f"{row.get('baseline_strategy', 'baseline')} | "
+            f"{row.get('disaggregated_strategy', 'unknown')} | "
+            f"{_fmt(row.get('ttft_delta_pct'))} | "
+            f"{_fmt(row.get('tpot_delta_pct'))} | "
+            f"{_fmt(row.get('itl_delta_pct'))} | "
+            f"{_fmt(row.get('e2e_delta_pct'))} | "
+            f"{_fmt(row.get('throughput_delta_pct'))} | "
+            f"{_fmt(row.get('quality_delta'))} | "
+            f"{row.get('disaggregation_interpretation', 'unknown')} |"
+        )
+
+
 def _append_prefix_overlap_sweep(lines: list[str], prefix_sweep_frame: pd.DataFrame | None) -> None:
     lines.extend(["", "## Prefix Overlap Sweep", ""])
     if prefix_sweep_frame is None:
@@ -554,6 +686,8 @@ def main() -> None:
     parser.add_argument("--long-context-input", type=Path, default=None)
     parser.add_argument("--kv-quant-input", type=Path, default=None)
     parser.add_argument("--kv-offload-input", type=Path, default=None)
+    parser.add_argument("--spec-decoding-input", type=Path, default=None)
+    parser.add_argument("--disagg-input", type=Path, default=None)
     args = parser.parse_args()
     generate_report(
         input_path=args.input,
@@ -564,6 +698,8 @@ def main() -> None:
         long_context_input_path=args.long_context_input,
         kv_quant_input_path=args.kv_quant_input,
         kv_offload_input_path=args.kv_offload_input,
+        spec_decoding_input_path=args.spec_decoding_input,
+        disagg_input_path=args.disagg_input,
     )
     print(f"Wrote report to {args.output}")
 

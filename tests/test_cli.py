@@ -359,6 +359,128 @@ def test_kv_offload_compare_cli_writes_summary(tmp_path) -> None:
     assert output.exists()
 
 
+def test_spec_decoding_plan_cli_writes_yaml_configs(tmp_path) -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        [
+            "spec-decoding-plan",
+            "--plan-dir",
+            str(tmp_path / "plan"),
+            "--experiment-prefix",
+            "spec_decode",
+            "--provider",
+            "mock",
+            "--engine",
+            "vllm",
+            "--model-id",
+            "mock-frontier-model",
+            "--base-url",
+            "http://127.0.0.1:8000/v1",
+            "--workload-file",
+            "workloads/generated/decode_heavy.jsonl",
+            "--output-dir",
+            "results/raw",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Wrote 2 speculative decoding experiment configs" in result.stdout
+    assert len(list((tmp_path / "plan").glob("*.yaml"))) == 2
+
+
+def test_spec_decoding_compare_cli_writes_summary(tmp_path) -> None:
+    runner = CliRunner()
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    output = tmp_path / "speculative_decoding.csv"
+    rows = [
+        _spec_decoding_row(strategy="baseline", e2e_ms=900.0, output_tps=60.0),
+        _spec_decoding_row(strategy="speculative_decoding", e2e_ms=720.0, output_tps=75.0),
+    ]
+    (raw_dir / "results.jsonl").write_text(
+        "\n".join(json.dumps(row) for row in rows),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "spec-decoding-compare",
+            "--input",
+            str(raw_dir),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Wrote speculative decoding comparison" in result.stdout
+    assert output.exists()
+
+
+def test_disagg_plan_cli_writes_yaml_configs(tmp_path) -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        [
+            "disagg-plan",
+            "--plan-dir",
+            str(tmp_path / "plan"),
+            "--experiment-prefix",
+            "disagg",
+            "--provider",
+            "mock",
+            "--engine",
+            "sglang",
+            "--model-id",
+            "mock-frontier-model",
+            "--base-url",
+            "http://127.0.0.1:30000/v1",
+            "--workload-file",
+            "workloads/generated/prefill_decode_grid.jsonl",
+            "--output-dir",
+            "results/raw",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Wrote 2 disaggregation experiment configs" in result.stdout
+    assert len(list((tmp_path / "plan").glob("*.yaml"))) == 2
+
+
+def test_disagg_compare_cli_writes_summary(tmp_path) -> None:
+    runner = CliRunner()
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    output = tmp_path / "disaggregation.csv"
+    rows = [
+        _disagg_row(strategy="baseline", ttft_ms=900.0, tpot_ms=12.0),
+        _disagg_row(strategy="prefill_decode_disaggregation", ttft_ms=700.0, tpot_ms=12.5),
+    ]
+    (raw_dir / "results.jsonl").write_text(
+        "\n".join(json.dumps(row) for row in rows),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "disagg-compare",
+            "--input",
+            str(raw_dir),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Wrote disaggregation comparison" in result.stdout
+    assert output.exists()
+
+
 def _cache_row(
     workload: str,
     cache_state: str,
@@ -484,5 +606,51 @@ def _kv_offload_row(*, strategy: str, ttft_ms: float, quality_score: float) -> d
     row["metadata"]["config_metadata"] = {
         "kv_offload_experiment": True,
         "workload_profile": "long_context_pressure",
+    }
+    return row
+
+
+def _spec_decoding_row(*, strategy: str, e2e_ms: float, output_tps: float) -> dict:
+    row = _cache_row(
+        "decode_heavy",
+        "na",
+        120.0,
+        0,
+        "decode_heavy",
+    )
+    row["experiment_id"] = f"spec_decode_vllm_{strategy}_decode_heavy"
+    row["strategy"] = strategy
+    row["task_id"] = f"{strategy}_decode_256"
+    row["target_output_tokens"] = 256
+    row["output_tokens"] = 128
+    row["tpot_ms"] = 8.0
+    row["itl_ms"] = 8.0
+    row["e2e_latency_ms"] = e2e_ms
+    row["output_tokens_per_second"] = output_tps
+    row["quality_score"] = 1.0
+    row["metadata"]["config_metadata"] = {
+        "speculative_decoding_experiment": True,
+        "workload_profile": "decode_heavy",
+    }
+    row["metadata"]["workload_metadata"] = {
+        "output_token_bucket": 256,
+    }
+    return row
+
+
+def _disagg_row(*, strategy: str, ttft_ms: float, tpot_ms: float) -> dict:
+    row = _prefill_decode_row()
+    row["experiment_id"] = f"disagg_sglang_{strategy}_prefill_decode_grid"
+    row["strategy"] = strategy
+    row["task_id"] = f"{strategy}_32768_32"
+    row["ttft_ms"] = ttft_ms
+    row["tpot_ms"] = tpot_ms
+    row["itl_ms"] = tpot_ms
+    row["e2e_latency_ms"] = ttft_ms + 320.0
+    row["output_tokens_per_second"] = 80.0
+    row["quality_score"] = 1.0
+    row["metadata"]["config_metadata"] = {
+        "prefill_decode_disaggregation_experiment": True,
+        "workload_profile": "prefill_decode_grid",
     }
     return row

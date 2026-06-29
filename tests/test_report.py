@@ -453,3 +453,150 @@ def test_report_generator_includes_optional_kv_offload(tmp_path: Path) -> None:
     assert "offload_promising" in report
     assert "memory delta %" in report
     assert "Mock KV offload timings validate benchmark wiring only" in report
+
+
+def test_report_generator_includes_optional_speculative_decoding(tmp_path: Path) -> None:
+    summary = tmp_path / "summary.csv"
+    speculative_decoding = tmp_path / "speculative_decoding.csv"
+    output = tmp_path / "report.md"
+    pd.DataFrame(
+        [
+            {
+                "experiment_id": "exp",
+                "provider": "mock",
+                "engine": "vllm",
+                "model_id": "model",
+                "strategy": "speculative_decoding",
+                "workload": "decode_heavy",
+                "concurrency": 1,
+                "requests": 3,
+                "success_rate": 1.0,
+                "ttft_ms_p50": 100.0,
+                "ttft_ms_p95": 120.0,
+                "e2e_latency_ms_p50": 200.0,
+                "e2e_latency_ms_p95": 240.0,
+                "output_tokens_per_second_mean": 80.0,
+                "quality_score_mean": 0.99,
+                "missing_metrics": "",
+            }
+        ]
+    ).to_csv(summary, index=False)
+    pd.DataFrame(
+        [
+            {
+                "provider": "mock",
+                "engine": "vllm",
+                "model_id": "model",
+                "workload": "decode_heavy",
+                "output_token_bucket": 256,
+                "baseline_strategy": "baseline",
+                "speculative_strategy": "speculative_decoding",
+                "baseline_ttft_ms_p50": 120.0,
+                "speculative_ttft_ms_p50": 125.0,
+                "ttft_delta_pct": 4.167,
+                "baseline_e2e_latency_ms_p50": 1000.0,
+                "speculative_e2e_latency_ms_p50": 760.0,
+                "e2e_delta_pct": -24.0,
+                "baseline_output_tokens_per_second_mean": 60.0,
+                "speculative_output_tokens_per_second_mean": 80.0,
+                "throughput_delta_pct": 33.333,
+                "baseline_quality_score_mean": 1.0,
+                "speculative_quality_score_mean": 0.99,
+                "quality_delta": -0.01,
+                "missing_metrics": "speculative_acceptance_rate",
+                "requests": 2,
+                "baseline_success_rate": 1.0,
+                "speculative_success_rate": 1.0,
+                "speculative_decoding_interpretation": "speculative_decoding_promising",
+            }
+        ]
+    ).to_csv(speculative_decoding, index=False)
+
+    generate_report(
+        input_path=summary,
+        output_path=output,
+        spec_decoding_input_path=speculative_decoding,
+    )
+
+    report = output.read_text(encoding="utf-8")
+    assert "## Speculative Decoding" in report
+    assert "speculative_decoding_promising" in report
+    assert "throughput delta %" in report
+    assert "Mock speculative decoding timings validate benchmark wiring only" in report
+
+
+def test_report_generator_includes_optional_disaggregation(tmp_path: Path) -> None:
+    summary = tmp_path / "summary.csv"
+    disaggregation = tmp_path / "disaggregation.csv"
+    output = tmp_path / "report.md"
+    pd.DataFrame(
+        [
+            {
+                "experiment_id": "exp",
+                "provider": "mock",
+                "engine": "sglang",
+                "model_id": "model",
+                "strategy": "prefill_decode_disaggregation",
+                "workload": "prefill_decode_grid",
+                "concurrency": 1,
+                "requests": 3,
+                "success_rate": 1.0,
+                "ttft_ms_p50": 700.0,
+                "ttft_ms_p95": 720.0,
+                "e2e_latency_ms_p50": 1040.0,
+                "e2e_latency_ms_p95": 1080.0,
+                "output_tokens_per_second_mean": 80.0,
+                "quality_score_mean": 1.0,
+                "missing_metrics": "",
+            }
+        ]
+    ).to_csv(summary, index=False)
+    pd.DataFrame(
+        [
+            {
+                "provider": "mock",
+                "engine": "sglang",
+                "model_id": "model",
+                "workload": "prefill_decode_grid",
+                "input_token_bucket": 32768,
+                "output_token_bucket": 32,
+                "baseline_strategy": "baseline",
+                "disaggregated_strategy": "prefill_decode_disaggregation",
+                "baseline_ttft_ms_p50": 900.0,
+                "disaggregated_ttft_ms_p50": 700.0,
+                "ttft_delta_pct": -22.222,
+                "baseline_tpot_ms_mean": 12.0,
+                "disaggregated_tpot_ms_mean": 12.5,
+                "tpot_delta_pct": 4.167,
+                "baseline_itl_ms_mean": 12.0,
+                "disaggregated_itl_ms_mean": 12.5,
+                "itl_delta_pct": 4.167,
+                "baseline_e2e_latency_ms_p50": 1220.0,
+                "disaggregated_e2e_latency_ms_p50": 1040.0,
+                "e2e_delta_pct": -14.754,
+                "baseline_output_tokens_per_second_mean": 80.0,
+                "disaggregated_output_tokens_per_second_mean": 82.0,
+                "throughput_delta_pct": 2.5,
+                "baseline_quality_score_mean": 1.0,
+                "disaggregated_quality_score_mean": 1.0,
+                "quality_delta": 0.0,
+                "missing_metrics": "",
+                "requests": 2,
+                "baseline_success_rate": 1.0,
+                "disaggregated_success_rate": 1.0,
+                "disaggregation_interpretation": "disaggregation_promising",
+            }
+        ]
+    ).to_csv(disaggregation, index=False)
+
+    generate_report(
+        input_path=summary,
+        output_path=output,
+        disagg_input_path=disaggregation,
+    )
+
+    report = output.read_text(encoding="utf-8")
+    assert "## Prefill/Decode Disaggregation" in report
+    assert "disaggregation_promising" in report
+    assert "TPOT delta %" in report
+    assert "Mock disaggregation timings validate benchmark wiring only" in report

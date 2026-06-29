@@ -368,6 +368,130 @@ def kv_offload_compare_command(
     print(f"[green]Wrote KV offload comparison[/green] {output}")
 
 
+@app.command("spec-decoding-plan")
+def spec_decoding_plan_command(
+    plan_dir: Path = typer.Option(..., "--plan-dir"),
+    experiment_prefix: str = typer.Option(..., "--experiment-prefix"),
+    provider: str = typer.Option(..., "--provider"),
+    engine: str = typer.Option(..., "--engine", "-e"),
+    model_id: str = typer.Option(..., "--model-id", "-m"),
+    base_url: str = typer.Option(..., "--base-url"),
+    workload_file: Path = typer.Option(..., "--workload-file"),
+    output_dir: Path = typer.Option(..., "--output-dir"),
+    workload_profile: str = typer.Option("decode_heavy", "--workload-profile"),
+    concurrency: int = typer.Option(1, "--concurrency", min=1),
+    max_output_tokens: int = typer.Option(512, "--max-output-tokens", min=1),
+) -> None:
+    """Write speculative decoding experiment YAML configs."""
+    from kvoptbench.experiments.speculative_decoding import (
+        write_speculative_decoding_plan_configs,
+    )
+
+    written = write_speculative_decoding_plan_configs(
+        plan_dir=plan_dir,
+        experiment_prefix=experiment_prefix,
+        provider=provider,
+        engine=engine,
+        model_id=model_id,
+        base_url=base_url,
+        workload_file=workload_file,
+        output_dir=output_dir,
+        workload_profile=workload_profile,
+        concurrency=concurrency,
+        max_output_tokens=max_output_tokens,
+    )
+    print(f"[green]Wrote {len(written)} speculative decoding experiment configs[/green] to {plan_dir}")
+
+
+@app.command("spec-decoding-run")
+def spec_decoding_run_command(
+    plan_dir: Path = typer.Option(..., "--plan-dir"),
+) -> None:
+    """Run all YAML configs in a speculative decoding plan directory."""
+    from kvoptbench.experiments.speculative_decoding import run_speculative_decoding_plan
+
+    outputs = run_speculative_decoding_plan(plan_dir)
+    print(f"[green]Ran {len(outputs)} speculative decoding experiment configs[/green]")
+    for output in outputs:
+        print(output)
+
+
+@app.command("spec-decoding-compare")
+def spec_decoding_compare_command(
+    input: Path = typer.Option(..., "--input", "-i"),
+    output: Path = typer.Option(..., "--output", "-o"),
+) -> None:
+    """Compare baseline and speculative decoding results."""
+    from kvoptbench.analysis.speculative_decoding import compare_speculative_decoding_results
+
+    compare_speculative_decoding_results(input_path=input, output_path=output)
+    print(f"[green]Wrote speculative decoding comparison[/green] {output}")
+
+
+@app.command("disagg-plan")
+def disagg_plan_command(
+    plan_dir: Path = typer.Option(..., "--plan-dir"),
+    experiment_prefix: str = typer.Option(..., "--experiment-prefix"),
+    provider: str = typer.Option(..., "--provider"),
+    engine: str = typer.Option(..., "--engine", "-e"),
+    model_id: str = typer.Option(..., "--model-id", "-m"),
+    base_url: str = typer.Option(..., "--base-url"),
+    workload_file: Path = typer.Option(..., "--workload-file"),
+    output_dir: Path = typer.Option(..., "--output-dir"),
+    workload_profile: str = typer.Option("prefill_decode_grid", "--workload-profile"),
+    concurrency: int = typer.Option(1, "--concurrency", min=1),
+    max_output_tokens: int = typer.Option(512, "--max-output-tokens", min=1),
+) -> None:
+    """Write prefill/decode disaggregation experiment YAML configs."""
+    from kvoptbench.experiments.prefill_decode_disaggregation import (
+        write_prefill_decode_disaggregation_plan_configs,
+    )
+
+    written = write_prefill_decode_disaggregation_plan_configs(
+        plan_dir=plan_dir,
+        experiment_prefix=experiment_prefix,
+        provider=provider,
+        engine=engine,
+        model_id=model_id,
+        base_url=base_url,
+        workload_file=workload_file,
+        output_dir=output_dir,
+        workload_profile=workload_profile,
+        concurrency=concurrency,
+        max_output_tokens=max_output_tokens,
+    )
+    print(f"[green]Wrote {len(written)} disaggregation experiment configs[/green] to {plan_dir}")
+
+
+@app.command("disagg-run")
+def disagg_run_command(
+    plan_dir: Path = typer.Option(..., "--plan-dir"),
+) -> None:
+    """Run all YAML configs in a prefill/decode disaggregation plan directory."""
+    from kvoptbench.experiments.prefill_decode_disaggregation import (
+        run_prefill_decode_disaggregation_plan,
+    )
+
+    outputs = run_prefill_decode_disaggregation_plan(plan_dir)
+    print(f"[green]Ran {len(outputs)} disaggregation experiment configs[/green]")
+    for output in outputs:
+        print(output)
+
+
+@app.command("disagg-compare")
+def disagg_compare_command(
+    input: Path = typer.Option(..., "--input", "-i"),
+    output: Path = typer.Option(..., "--output", "-o"),
+) -> None:
+    """Compare baseline and prefill/decode disaggregation results."""
+    from kvoptbench.analysis.prefill_decode_disaggregation import (
+        compare_prefill_decode_disaggregation_results,
+    )
+
+    compare_prefill_decode_disaggregation_results(input_path=input, output_path=output)
+    print(f"[green]Wrote disaggregation comparison[/green] {output}")
+
+
 @app.command("generate-workload")
 def generate_workload_command(
     profile: str = typer.Option(..., "--profile", "-p"),
@@ -441,6 +565,8 @@ def report_command(
     long_context_input: Path | None = typer.Option(None, "--long-context-input"),
     kv_quant_input: Path | None = typer.Option(None, "--kv-quant-input"),
     kv_offload_input: Path | None = typer.Option(None, "--kv-offload-input"),
+    spec_decoding_input: Path | None = typer.Option(None, "--spec-decoding-input"),
+    disagg_input: Path | None = typer.Option(None, "--disagg-input"),
 ) -> None:
     """Generate a markdown report from a summary CSV."""
     from kvoptbench.reports.generate import generate_report
@@ -454,6 +580,8 @@ def report_command(
         long_context_input_path=long_context_input,
         kv_quant_input_path=kv_quant_input,
         kv_offload_input_path=kv_offload_input,
+        spec_decoding_input_path=spec_decoding_input,
+        disagg_input_path=disagg_input,
     )
     print(f"[green]Wrote report[/green] {output}")
 
