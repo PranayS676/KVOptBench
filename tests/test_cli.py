@@ -237,6 +237,67 @@ def test_long_context_compare_cli_writes_summary(tmp_path) -> None:
     assert output.exists()
 
 
+def test_kv_quant_plan_cli_writes_yaml_configs(tmp_path) -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        [
+            "kv-quant-plan",
+            "--plan-dir",
+            str(tmp_path / "plan"),
+            "--experiment-prefix",
+            "kv_quant",
+            "--provider",
+            "mock",
+            "--engine",
+            "vllm",
+            "--model-id",
+            "mock-frontier-model",
+            "--base-url",
+            "http://127.0.0.1:8000/v1",
+            "--workload-file",
+            "workloads/generated/long_context_pressure.jsonl",
+            "--output-dir",
+            "results/raw",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Wrote 2 KV quantization experiment configs" in result.stdout
+    assert len(list((tmp_path / "plan").glob("*.yaml"))) == 2
+
+
+def test_kv_quant_compare_cli_writes_summary(tmp_path) -> None:
+    runner = CliRunner()
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    output = tmp_path / "kv_quantization.csv"
+    rows = [
+        _kv_quant_row(strategy="baseline", ttft_ms=300.0, quality_score=1.0),
+        _kv_quant_row(strategy="kv_fp8", ttft_ms=310.0, quality_score=0.99),
+    ]
+    (raw_dir / "results.jsonl").write_text(
+        "\n".join(json.dumps(row) for row in rows),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "kv-quant-compare",
+            "--input",
+            str(raw_dir),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Wrote KV quantization comparison" in result.stdout
+    assert output.exists()
+
+
 def _cache_row(
     workload: str,
     cache_state: str,
@@ -328,5 +389,22 @@ def _long_context_row() -> dict:
         "context_token_bucket": 32768,
         "pressure_level": "high",
         "expected_pressure": "prefill_latency_growth",
+    }
+    return row
+
+
+def _kv_quant_row(*, strategy: str, ttft_ms: float, quality_score: float) -> dict:
+    row = _long_context_row()
+    row["experiment_id"] = f"kv_quant_vllm_{strategy}_long_context_pressure"
+    row["strategy"] = strategy
+    row["task_id"] = f"{strategy}_32768"
+    row["ttft_ms"] = ttft_ms
+    row["e2e_latency_ms"] = ttft_ms + 200.0
+    row["quality_score"] = quality_score
+    row["gpu_memory_peak_gb"] = None
+    row["missing_metrics"] = ["gpu_memory_peak_gb"]
+    row["metadata"]["config_metadata"] = {
+        "kv_quantization_experiment": True,
+        "workload_profile": "long_context_pressure",
     }
     return row
