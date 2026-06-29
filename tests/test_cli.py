@@ -91,6 +91,38 @@ def test_cache_compare_cli_writes_cache_summary(tmp_path) -> None:
     assert output.exists()
 
 
+def test_prefix_sweep_compare_cli_writes_prefix_sweep_summary(tmp_path) -> None:
+    runner = CliRunner()
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    output = tmp_path / "prefix_sweep.csv"
+    rows = [
+        _prefix_row(0.0, "cold", 100.0),
+        _prefix_row(0.0, "warm", 100.0),
+        _prefix_row(0.5, "cold", 260.0),
+        _prefix_row(0.5, "warm", 160.0),
+    ]
+    (raw_dir / "prefix.jsonl").write_text(
+        "\n".join(json.dumps(row) for row in rows),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "prefix-sweep-compare",
+            "--input",
+            str(raw_dir),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Wrote prefix sweep comparison" in result.stdout
+    assert output.exists()
+
+
 def _cache_row(
     workload: str,
     cache_state: str,
@@ -127,3 +159,15 @@ def _cache_row(
             }
         },
     }
+
+
+def _prefix_row(ratio: float, cache_state: str, ttft_ms: float) -> dict:
+    row = _cache_row(
+        "partial_prefix_reuse",
+        cache_state,
+        ttft_ms,
+        int(1000 * ratio),
+        "shared_prefix",
+    )
+    row["metadata"]["workload_metadata"] = {"shared_prefix_ratio": ratio}
+    return row

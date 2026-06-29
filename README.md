@@ -37,7 +37,7 @@ KVOptBench is designed to answer deeper questions:
 
 ## Status
 
-Early project. The local/mock benchmark harness, real OpenAI-compatible endpoint runner, engine profiles, cache experiment planning, and cache comparison reporting are in place.
+Early project. The local/mock benchmark harness, real OpenAI-compatible endpoint runner, engine profiles, cache experiment planning, cache comparison reporting, and prefix-overlap sweep analysis are in place.
 
 ## Local Mock Quickstart
 
@@ -162,6 +162,28 @@ kvoptbench cache-run --plan-dir configs/cache_plan
 kvoptbench summarize --input results/raw --output results/summary.csv
 kvoptbench cache-compare --input results/raw --output results/cache_summary.csv
 kvoptbench report --input results/summary.csv --cache-input results/cache_summary.csv --output reports/cache_report.md
+```
+
+To test where prefix caching starts to pay off, generate a partial-prefix workload and add the prefix sweep comparison output to the report:
+
+```bash
+kvoptbench generate-workload --profile partial_prefix --count 6 --out workloads/generated/partial_prefix_sweep.jsonl
+
+kvoptbench cache-plan \
+  --plan-dir configs/prefix_sweep_plan \
+  --experiment-prefix prefix_sweep \
+  --provider mock \
+  --engine vllm \
+  --model-id mock-frontier-model \
+  --base-url http://127.0.0.1:8000/v1 \
+  --shared-workload-file workloads/generated/partial_prefix_sweep.jsonl \
+  --random-workload-file workloads/generated/random_prefix_32k.jsonl \
+  --output-dir results/raw
+
+kvoptbench cache-run --plan-dir configs/prefix_sweep_plan
+kvoptbench summarize --input results/raw --output results/summary.csv
+kvoptbench prefix-sweep-compare --input results/raw --output results/prefix_sweep.csv
+kvoptbench report --input results/summary.csv --prefix-sweep-input results/prefix_sweep.csv --output reports/prefix_sweep_report.md
 ```
 
 ## License
