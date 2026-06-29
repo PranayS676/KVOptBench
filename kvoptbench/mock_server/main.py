@@ -1,4 +1,4 @@
-"""Local mock OpenAI-compatible server for Milestone 1."""
+"""Local mock OpenAI-compatible server."""
 
 from __future__ import annotations
 

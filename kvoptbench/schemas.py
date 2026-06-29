@@ -116,6 +116,55 @@ class EndpointHealth(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class EngineEndpoint(BaseModel):
+    """OpenAI-compatible endpoint details implied by an engine command preview."""
+
+    base_url: str
+    healthcheck_path: str = "/v1/models"
+
+
+class EngineStrategyProfile(BaseModel):
+    """One engine strategy and its server-command preview metadata."""
+
+    name: str
+    description: str
+    command_template: str
+    notes: list[str] = Field(default_factory=list)
+    placeholder: bool = False
+
+
+class EngineProfile(BaseModel):
+    """Config-driven engine profile used outside the generic runner."""
+
+    engine: str
+    display_name: str
+    default_port: int
+    strategies: dict[str, EngineStrategyProfile]
+    notes: list[str] = Field(default_factory=list)
+
+
+class EngineCommandPreview(BaseModel):
+    """Rendered command preview. It is documentation, not process management."""
+
+    engine: str
+    strategy: str
+    description: str
+    command: str
+    endpoint: EngineEndpoint
+    launches_server: bool = False
+    notes: str
+
+
+class CacheExperimentCase(BaseModel):
+    """One generated cache experiment config and its role in the ablation matrix."""
+
+    strategy: str
+    workload_profile: Literal["shared_prefix", "random_prefix"]
+    cache_pass: Literal["cold", "warm"]
+    is_control: bool = False
+    config: ExperimentConfig
+
+
 class RequestResult(BaseModel):
     """Required request-level JSONL result row."""
 
