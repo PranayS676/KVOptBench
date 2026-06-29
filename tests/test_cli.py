@@ -123,6 +123,63 @@ def test_prefix_sweep_compare_cli_writes_prefix_sweep_summary(tmp_path) -> None:
     assert output.exists()
 
 
+def test_prefill_decode_plan_cli_writes_yaml_configs(tmp_path) -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        [
+            "prefill-decode-plan",
+            "--plan-dir",
+            str(tmp_path / "plan"),
+            "--experiment-prefix",
+            "prefill_decode",
+            "--provider",
+            "mock",
+            "--engine",
+            "vllm",
+            "--model-id",
+            "mock-frontier-model",
+            "--base-url",
+            "http://127.0.0.1:8000/v1",
+            "--workload-file",
+            "workloads/generated/prefill_decode_grid.jsonl",
+            "--output-dir",
+            "results/raw",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Wrote 1 prefill/decode experiment configs" in result.stdout
+    assert len(list((tmp_path / "plan").glob("*.yaml"))) == 1
+
+
+def test_prefill_decode_compare_cli_writes_summary(tmp_path) -> None:
+    runner = CliRunner()
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    output = tmp_path / "prefill_decode.csv"
+    (raw_dir / "results.jsonl").write_text(
+        json.dumps(_prefill_decode_row()) + "\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "prefill-decode-compare",
+            "--input",
+            str(raw_dir),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Wrote prefill/decode comparison" in result.stdout
+    assert output.exists()
+
+
 def _cache_row(
     workload: str,
     cache_state: str,
@@ -170,4 +227,27 @@ def _prefix_row(ratio: float, cache_state: str, ttft_ms: float) -> dict:
         "shared_prefix",
     )
     row["metadata"]["workload_metadata"] = {"shared_prefix_ratio": ratio}
+    return row
+
+
+def _prefill_decode_row() -> dict:
+    row = _cache_row(
+        "prefill_decode_grid",
+        "na",
+        900.0,
+        0,
+        "prefill_decode_grid",
+    )
+    row["tpot_ms"] = 12.0
+    row["itl_ms"] = 11.0
+    row["output_tokens_per_second"] = 80.0
+    row["metadata"]["config_metadata"] = {
+        "prefill_decode_experiment": True,
+        "workload_profile": "prefill_decode_grid",
+    }
+    row["metadata"]["workload_metadata"] = {
+        "input_token_bucket": 32768,
+        "output_token_bucket": 32,
+        "expected_bottleneck": "prefill_bound",
+    }
     return row
