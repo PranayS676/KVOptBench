@@ -1,0 +1,2 @@
+provider,engine,model_id,strategy,shared_cold_ttft_ms,shared_warm_ttft_ms,random_cold_ttft_ms,random_warm_ttft_ms,shared_cache_miss_penalty_ms,random_cache_miss_penalty_ms,control_adjusted_cache_gain_ms,shared_prefix_tokens,miss_penalty_per_1k_tokens,interpretation
+mock,vllm,mock-frontier-model,cache_on,320.0,110.0,295.0,280.0,210.0,15.0,195.0,12000,17.5,credible_cache_reuse_signal

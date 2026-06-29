@@ -1,0 +1,9 @@
+experiment_id,provider,engine,model_id,strategy,workload,concurrency,requests,success_rate,ttft_ms_p50,ttft_ms_p95,e2e_latency_ms_p50,e2e_latency_ms_p95,requests_per_second_mean,output_tokens_per_second_mean,quality_score_mean,cache_hit_rate_mean,cache_miss_penalty_ms_mean,cache_interpretation,missing_metrics
+release_cache,mock,vllm,mock-frontier-model,cache_on,shared_prefix_long_doc,1,8,1.0,110.0,145.0,420.0,510.0,1.9,76.0,1.0,0.86,18.0,credible_cache_reuse_signal,gpu_memory_peak_gb
+release_prefix_sweep,mock,vllm,mock-frontier-model,cache_on,partial_prefix_reuse,1,6,1.0,160.0,210.0,480.0,590.0,1.7,72.0,1.0,0.72,22.0,credible_cache_reuse_signal,gpu_memory_peak_gb
+release_prefill_decode,mock,vllm,mock-frontier-model,baseline,prefill_decode_grid,1,6,1.0,620.0,700.0,980.0,1100.0,1.2,62.0,1.0,,,,
+release_long_context,mock,vllm,mock-frontier-model,baseline,long_context_pressure,1,5,1.0,700.0,850.0,1120.0,1300.0,0.9,58.0,1.0,,,,gpu_memory_peak_gb
+release_kv_quant,mock,vllm,mock-frontier-model,kv_fp8,long_context_pressure,1,5,1.0,690.0,820.0,1030.0,1210.0,1.0,68.0,0.99,,,,gpu_memory_peak_gb
+release_kv_offload,mock,vllm,mock-frontier-model,kv_offload,long_context_pressure,1,5,1.0,720.0,870.0,1160.0,1390.0,0.85,57.0,0.99,,,,gpu_memory_peak_gb
+release_spec_decode,mock,vllm,mock-frontier-model,speculative_decoding,decode_heavy,1,5,1.0,125.0,150.0,760.0,830.0,1.3,80.0,0.99,,,,speculative_acceptance_rate
+release_disagg,mock,sglang,mock-frontier-model,prefill_decode_disaggregation,prefill_decode_grid,1,6,1.0,700.0,760.0,1040.0,1110.0,1.1,82.0,1.0,,,,

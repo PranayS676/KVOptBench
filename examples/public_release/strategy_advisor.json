@@ -1,0 +1,130 @@
+{
+  "generated_at": "2026-06-29T00:00:00+00:00",
+  "overall_recommendation": "prefix_caching",
+  "recommendations": [
+    {
+      "strategy": "prefix_caching",
+      "decision": "recommend",
+      "confidence": "high",
+      "rank": 1,
+      "score": 5.45,
+      "evidence": [
+        {
+          "message": "Observed control-adjusted cache gain of 195.000 ms.",
+          "metric": "control_adjusted_cache_gain_ms",
+          "value": 195.0
+        },
+        {
+          "message": "Meaningful cache gain appeared at shared-prefix ratio 0.250.",
+          "metric": "shared_prefix_ratio",
+          "value": 0.25
+        }
+      ],
+      "caveats": [],
+      "next_experiments": [],
+      "source": "cache comparison CSV"
+    },
+    {
+      "strategy": "kv_quantization",
+      "decision": "recommend",
+      "confidence": "high",
+      "rank": 2,
+      "score": 4.91,
+      "evidence": [
+        {
+          "message": "End-to-end latency improved by 8.036%.",
+          "metric": "e2e_delta_pct",
+          "value": -8.036
+        },
+        {
+          "message": "Output throughput improved by 17.241%.",
+          "metric": "throughput_delta_pct",
+          "value": 17.241
+        },
+        {
+          "message": "GPU memory improved by 39.583%.",
+          "metric": "memory_delta_pct",
+          "value": -39.583
+        }
+      ],
+      "caveats": [],
+      "next_experiments": [
+        "Repeat KV quantization across larger context buckets and quality-sensitive tasks."
+      ],
+      "source": "KV quantization comparison CSV"
+    },
+    {
+      "strategy": "speculative_decoding",
+      "decision": "recommend",
+      "confidence": "medium",
+      "rank": 3,
+      "score": 4.79,
+      "evidence": [
+        {
+          "message": "End-to-end latency improved by 24.000%.",
+          "metric": "e2e_delta_pct",
+          "value": -24.0
+        },
+        {
+          "message": "Output throughput improved by 33.333%.",
+          "metric": "throughput_delta_pct",
+          "value": 33.333
+        }
+      ],
+      "caveats": [
+        "Missing metrics: speculative_acceptance_rate.",
+        "Speculative acceptance telemetry is missing."
+      ],
+      "next_experiments": [
+        "Retest with acceptance-rate telemetry and representative long-output prompts."
+      ],
+      "source": "speculative decoding comparison CSV"
+    },
+    {
+      "strategy": "prefill_decode_disaggregation",
+      "decision": "consider",
+      "confidence": "high",
+      "rank": 4,
+      "score": 3.48,
+      "evidence": [
+        {
+          "message": "TTFT improved by 22.222%.",
+          "metric": "ttft_delta_pct",
+          "value": -22.222
+        },
+        {
+          "message": "End-to-end latency improved by 14.754%.",
+          "metric": "e2e_delta_pct",
+          "value": -14.754
+        }
+      ],
+      "caveats": [],
+      "next_experiments": [
+        "Retest under mixed prefill/decode traffic with production-like routing."
+      ],
+      "source": "prefill/decode disaggregation comparison CSV"
+    },
+    {
+      "strategy": "kv_offload",
+      "decision": "inconclusive",
+      "confidence": "low",
+      "rank": 5,
+      "score": 0.0,
+      "evidence": [
+        {
+          "message": "End-to-end latency regressed by 3.571%.",
+          "metric": "e2e_delta_pct",
+          "value": 3.571
+        }
+      ],
+      "caveats": [
+        "KV offload memory telemetry is missing.",
+        "Missing metrics: gpu_memory_peak_gb."
+      ],
+      "next_experiments": [
+        "Rerun KV offload with GPU memory telemetry enabled."
+      ],
+      "source": "KV offload comparison CSV"
+    }
+  ]
+}
