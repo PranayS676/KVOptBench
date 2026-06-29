@@ -65,15 +65,15 @@
 - vLLM and SGLang placeholder strategy profiles for backend-specific setups
 - Markdown report integration
 
-## Next: Strategy Optimizer
+## Done: Strategy Advisor
 
-- Workload feature extraction
-- Strategy recommendation rules
-- Quality-adjusted throughput
-- Pareto analysis
-- Automatic strategy selector evaluation
+- Evidence-based recommendation rules
+- Ranked recommendations for prefix caching, KV quantization, KV offload, speculative decoding, and prefill/decode disaggregation
+- JSON and markdown advisor outputs
+- Missing-telemetry caveats and follow-up experiment suggestions
+- Compatibility wrapper for basic strategy selection
 
-## Later: Public Research Release
+## Next: Public Research Release
 
 - Example reports
 - Reproducibility guide

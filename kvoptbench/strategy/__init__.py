@@ -1,2 +1,2 @@
-"""Strategy selection helpers."""
+"""Evidence-based strategy recommendation helpers."""
 
