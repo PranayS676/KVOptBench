@@ -86,6 +86,40 @@ The local run writes:
 
 Generated workloads, raw results, summaries, and reports are ignored by git by default.
 
+## Public Example Bundle
+
+A deterministic public example bundle is included under `examples/public_release/`. It contains small CSV fixtures, a checked-in mock benchmark report, and checked-in strategy advisor JSON/Markdown outputs. Use it to inspect the report shape without starting a server.
+
+```bash
+kvoptbench strategy-recommend \
+  --summary examples/public_release/summary.csv \
+  --cache-input examples/public_release/cache_summary.csv \
+  --prefix-sweep-input examples/public_release/prefix_sweep.csv \
+  --prefill-decode-input examples/public_release/prefill_decode.csv \
+  --long-context-input examples/public_release/long_context.csv \
+  --kv-quant-input examples/public_release/kv_quantization.csv \
+  --kv-offload-input examples/public_release/kv_offload.csv \
+  --spec-decoding-input examples/public_release/speculative_decoding.csv \
+  --disagg-input examples/public_release/disaggregation.csv \
+  --json-output reports/outputs/strategy_advisor.json \
+  --markdown-output reports/outputs/strategy_advisor.md
+
+kvoptbench report \
+  --input examples/public_release/summary.csv \
+  --cache-input examples/public_release/cache_summary.csv \
+  --prefix-sweep-input examples/public_release/prefix_sweep.csv \
+  --prefill-decode-input examples/public_release/prefill_decode.csv \
+  --long-context-input examples/public_release/long_context.csv \
+  --kv-quant-input examples/public_release/kv_quantization.csv \
+  --kv-offload-input examples/public_release/kv_offload.csv \
+  --spec-decoding-input examples/public_release/speculative_decoding.csv \
+  --disagg-input examples/public_release/disaggregation.csv \
+  --strategy-input reports/outputs/strategy_advisor.json \
+  --output reports/outputs/mock_benchmark_report.md
+```
+
+See `guides/reproducibility.md` for the full fresh-clone workflow and interpretation rules.
+
 ### CLI shortcuts
 
 The installed console command exposes the same workflow:
@@ -369,6 +403,8 @@ kvoptbench strategy-recommend \
 ```
 
 Recommendations currently cover prefix caching, KV quantization, KV offload, speculative decoding, and prefill/decode disaggregation. If a comparison CSV or required metric is unavailable, the advisor reports `needs_more_data` or `inconclusive` with a concrete follow-up instead of fabricating a result.
+
+The main markdown report can embed the advisor output when `--strategy-input` points at the advisor JSON.
 
 ## License
 

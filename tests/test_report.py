@@ -600,3 +600,71 @@ def test_report_generator_includes_optional_disaggregation(tmp_path: Path) -> No
     assert "disaggregation_promising" in report
     assert "TPOT delta %" in report
     assert "Mock disaggregation timings validate benchmark wiring only" in report
+
+
+def test_report_generator_includes_strategy_advisor(tmp_path: Path) -> None:
+    summary = tmp_path / "summary.csv"
+    strategy_advisor = tmp_path / "strategy_advisor.json"
+    output = tmp_path / "report.md"
+    pd.DataFrame(
+        [
+            {
+                "experiment_id": "exp",
+                "provider": "mock",
+                "engine": "vllm",
+                "model_id": "model",
+                "strategy": "cache_on",
+                "workload": "shared_prefix_long_doc",
+                "concurrency": 1,
+                "requests": 4,
+                "success_rate": 1.0,
+                "ttft_ms_p50": 100.0,
+                "ttft_ms_p95": 120.0,
+                "e2e_latency_ms_p50": 200.0,
+                "e2e_latency_ms_p95": 240.0,
+                "output_tokens_per_second_mean": 20.0,
+                "quality_score_mean": 1.0,
+                "missing_metrics": "",
+            }
+        ]
+    ).to_csv(summary, index=False)
+    strategy_advisor.write_text(
+        """{
+  "generated_at": "2026-06-29T00:00:00+00:00",
+  "overall_recommendation": "prefix_caching",
+  "recommendations": [
+    {
+      "strategy": "prefix_caching",
+      "decision": "recommend",
+      "confidence": "high",
+      "rank": 1,
+      "score": 5.0,
+      "evidence": [
+        {
+          "message": "Observed control-adjusted cache gain of 195.000 ms.",
+          "metric": "control_adjusted_cache_gain_ms",
+          "value": 195.0
+        }
+      ],
+      "caveats": [],
+      "next_experiments": ["Run prefix-sweep-compare on production-shaped prompts."],
+      "source": "cache comparison CSV"
+    }
+  ]
+}
+""",
+        encoding="utf-8",
+    )
+
+    generate_report(
+        input_path=summary,
+        output_path=output,
+        strategy_input_path=strategy_advisor,
+    )
+
+    report = output.read_text(encoding="utf-8")
+    assert "## Strategy Advisor" in report
+    assert "Overall recommendation: `prefix_caching`" in report
+    assert "| 1 | `prefix_caching` | `recommend` | `high` |" in report
+    assert "Observed control-adjusted cache gain" in report
+    assert "Run prefix-sweep-compare" in report

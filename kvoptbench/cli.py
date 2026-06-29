@@ -567,6 +567,7 @@ def report_command(
     kv_offload_input: Path | None = typer.Option(None, "--kv-offload-input"),
     spec_decoding_input: Path | None = typer.Option(None, "--spec-decoding-input"),
     disagg_input: Path | None = typer.Option(None, "--disagg-input"),
+    strategy_input: Path | None = typer.Option(None, "--strategy-input"),
 ) -> None:
     """Generate a markdown report from a summary CSV."""
     from kvoptbench.reports.generate import generate_report
@@ -582,6 +583,7 @@ def report_command(
         kv_offload_input_path=kv_offload_input,
         spec_decoding_input_path=spec_decoding_input,
         disagg_input_path=disagg_input,
+        strategy_input_path=strategy_input,
     )
     print(f"[green]Wrote report[/green] {output}")
 

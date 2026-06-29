@@ -36,6 +36,12 @@ workloads/generated/*
 *.log
 reports/*.md
 
+# Public, deterministic example release artifacts
+!examples/public_release/
+!examples/public_release/*.csv
+!examples/public_release/*.json
+!examples/public_release/*.md
+
 # Keep placeholder dirs
 !results/raw/.gitkeep
 !results/processed/.gitkeep

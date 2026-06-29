@@ -73,10 +73,15 @@
 - Missing-telemetry caveats and follow-up experiment suggestions
 - Compatibility wrapper for basic strategy selection
 
-## Next: Public Research Release
+## Done: Public Example Bundle
 
-- Example reports
-- Reproducibility guide
+- Deterministic public CSV fixtures for benchmark summary and comparison outputs
+- Checked-in mock benchmark report and strategy advisor outputs
+- Fresh-clone reproducibility guide
+- Combined report support for embedded strategy advisor output
+
+## Next: Public Research Release Guides
+
 - RunPod runbook
 - vLLM/SGLang engine guides
 - Public benchmark result templates

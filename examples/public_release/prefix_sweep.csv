@@ -1,0 +1,4 @@
+provider,engine,model_id,strategy,shared_prefix_ratio,shared_prefix_tokens,cold_ttft_ms,warm_ttft_ms,cache_gain_ms,miss_penalty_per_1k_tokens,requests,success_rate,interpretation
+mock,vllm,mock-frontier-model,cache_on,0.0,0,170.0,169.0,1.0,,2,1.0,no_prefix_overlap
+mock,vllm,mock-frontier-model,cache_on,0.25,3000,230.0,185.0,45.0,15.0,2,1.0,meaningful_prefix_cache_gain
+mock,vllm,mock-frontier-model,cache_on,0.5,6000,300.0,160.0,140.0,23.333,2,1.0,meaningful_prefix_cache_gain

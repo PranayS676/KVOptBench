@@ -27,6 +27,7 @@ def generate_report(
     kv_offload_input_path: str | Path | None = None,
     spec_decoding_input_path: str | Path | None = None,
     disagg_input_path: str | Path | None = None,
+    strategy_input_path: str | Path | None = None,
 ) -> Path:
     """Generate a markdown report from a summary CSV."""
     input_path = Path(input_path)
@@ -42,6 +43,7 @@ def generate_report(
     kv_offload_frame = _read_kv_offload(kv_offload_input_path)
     spec_decoding_frame = _read_speculative_decoding(spec_decoding_input_path)
     disagg_frame = _read_disaggregation(disagg_input_path)
+    strategy_report = _read_strategy_advisor(strategy_input_path)
 
     total_requests = int(frame["requests"].sum()) if "requests" in frame else 0
     avg_success = frame["success_rate"].mean() if "success_rate" in frame else None
@@ -162,6 +164,7 @@ def generate_report(
     _append_kv_offload(lines, kv_offload_frame)
     _append_speculative_decoding(lines, spec_decoding_frame)
     _append_disaggregation(lines, disagg_frame)
+    _append_strategy_advisor(lines, strategy_report)
 
     lines.extend(["", "## Cache Interpretation", ""])
     if "cache_interpretation" in frame.columns:
@@ -287,6 +290,15 @@ def _read_disaggregation(disagg_input_path: str | Path | None) -> pd.DataFrame |
     if disagg_frame.empty:
         return pd.DataFrame()
     return disagg_frame
+
+
+def _read_strategy_advisor(strategy_input_path: str | Path | None):
+    if strategy_input_path is None:
+        return None
+    from kvoptbench.strategy.advisor import StrategyAdvisorReport
+
+    strategy_path = Path(strategy_input_path)
+    return StrategyAdvisorReport.model_validate_json(strategy_path.read_text(encoding="utf-8"))
 
 
 def _append_cache_comparison(lines: list[str], cache_frame: pd.DataFrame | None) -> None:
@@ -676,6 +688,43 @@ def _append_prefix_overlap_sweep(lines: list[str], prefix_sweep_frame: pd.DataFr
         )
 
 
+def _append_strategy_advisor(lines: list[str], strategy_report) -> None:
+    if strategy_report is None:
+        return
+
+    lines.extend(["", "## Strategy Advisor", ""])
+    lines.append(f"Overall recommendation: `{strategy_report.overall_recommendation}`.")
+    lines.extend(
+        [
+            "",
+            "| rank | strategy | decision | confidence | source |",
+            "|---:|---|---|---|---|",
+        ]
+    )
+    recommendations = sorted(
+        strategy_report.recommendations,
+        key=lambda item: item.rank if item.rank is not None else 9999,
+    )
+    for item in recommendations:
+        lines.append(
+            f"| {item.rank or 'n/a'} | `{item.strategy}` | `{item.decision}` | "
+            f"`{item.confidence}` | {item.source} |"
+        )
+
+    lines.extend(["", "Advisor details:", ""])
+    for item in recommendations:
+        lines.append(f"- `{item.strategy}`:")
+        if item.evidence:
+            lines.append(
+                "  Evidence: "
+                + " ".join(evidence.message for evidence in item.evidence)
+            )
+        if item.caveats:
+            lines.append("  Caveats: " + " ".join(item.caveats))
+        if item.next_experiments:
+            lines.append("  Next experiments: " + " ".join(item.next_experiments))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a KVOptBench markdown report.")
     parser.add_argument("--input", required=True, type=Path)
@@ -688,6 +737,7 @@ def main() -> None:
     parser.add_argument("--kv-offload-input", type=Path, default=None)
     parser.add_argument("--spec-decoding-input", type=Path, default=None)
     parser.add_argument("--disagg-input", type=Path, default=None)
+    parser.add_argument("--strategy-input", type=Path, default=None)
     args = parser.parse_args()
     generate_report(
         input_path=args.input,
@@ -700,6 +750,7 @@ def main() -> None:
         kv_offload_input_path=args.kv_offload_input,
         spec_decoding_input_path=args.spec_decoding_input,
         disagg_input_path=args.disagg_input,
+        strategy_input_path=args.strategy_input,
     )
     print(f"Wrote report to {args.output}")
 
