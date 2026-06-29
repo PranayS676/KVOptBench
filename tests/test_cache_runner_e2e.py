@@ -6,6 +6,7 @@ from pathlib import Path
 import uvicorn
 
 from kvoptbench.analysis.cache_compare import compare_cache_results
+from kvoptbench.analysis.prefix_sweep import compare_prefix_sweep_results
 from kvoptbench.analysis.summarize import summarize_results
 from kvoptbench.experiments.cache import run_cache_plan, write_cache_plan_configs
 from kvoptbench.mock_server.main import create_app
@@ -40,9 +41,9 @@ def test_cache_plan_runs_against_mock_server_and_records_cold_warm(tmp_path: Pat
 
     try:
         generate_to_file(
-            profile="shared_prefix",
+            profile="partial_prefix",
             out=shared_workload,
-            count=2,
+            count=6,
             target_input_tokens=256,
             target_output_tokens=16,
         )
@@ -79,7 +80,7 @@ def test_cache_plan_runs_against_mock_server_and_records_cold_warm(tmp_path: Pat
             for row in rows
             if row["metadata"]["config_metadata"]["workload_profile"] == "shared_prefix"
         ]
-        assert {row["cache_state"] for row in shared_rows} == {"cold", "warm"}
+        assert {"cold", "warm"}.issubset({row["cache_state"] for row in shared_rows})
         assert all(row["metadata"]["config_metadata"]["cache_experiment"] for row in rows)
 
         summary = summarize_results(input_path=raw_dir, output_path=tmp_path / "summary.csv")
@@ -87,15 +88,22 @@ def test_cache_plan_runs_against_mock_server_and_records_cold_warm(tmp_path: Pat
             input_path=raw_dir,
             output_path=tmp_path / "cache_summary.csv",
         )
+        prefix_sweep = compare_prefix_sweep_results(
+            input_path=raw_dir,
+            output_path=tmp_path / "prefix_sweep.csv",
+        )
         report = generate_report(
             input_path=summary,
             output_path=tmp_path / "report.md",
             cache_input_path=cache_summary,
+            prefix_sweep_input_path=prefix_sweep,
         )
 
         report_text = report.read_text(encoding="utf-8")
         assert "## Cache Comparison" in report_text
+        assert "## Prefix Overlap Sweep" in report_text
         assert "interpretation" in report_text
         assert "mock,vllm,mock-frontier-model,cache_on" in cache_summary.read_text(encoding="utf-8")
+        assert "0.25" in prefix_sweep.read_text(encoding="utf-8")
     finally:
         server.should_exit = True

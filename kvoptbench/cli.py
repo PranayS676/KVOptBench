@@ -128,6 +128,18 @@ def cache_compare_command(
     print(f"[green]Wrote cache comparison[/green] {output}")
 
 
+@app.command("prefix-sweep-compare")
+def prefix_sweep_compare_command(
+    input: Path = typer.Option(..., "--input", "-i"),
+    output: Path = typer.Option(..., "--output", "-o"),
+) -> None:
+    """Compare cache behavior across shared-prefix overlap ratios."""
+    from kvoptbench.analysis.prefix_sweep import compare_prefix_sweep_results
+
+    compare_prefix_sweep_results(input_path=input, output_path=output)
+    print(f"[green]Wrote prefix sweep comparison[/green] {output}")
+
+
 @app.command("generate-workload")
 def generate_workload_command(
     profile: str = typer.Option(..., "--profile", "-p"),
@@ -190,11 +202,17 @@ def report_command(
     input: Path = typer.Option(..., "--input", "-i"),
     output: Path = typer.Option(..., "--output", "-o"),
     cache_input: Path | None = typer.Option(None, "--cache-input"),
+    prefix_sweep_input: Path | None = typer.Option(None, "--prefix-sweep-input"),
 ) -> None:
     """Generate a markdown report from a summary CSV."""
     from kvoptbench.reports.generate import generate_report
 
-    generate_report(input_path=input, output_path=output, cache_input_path=cache_input)
+    generate_report(
+        input_path=input,
+        output_path=output,
+        cache_input_path=cache_input,
+        prefix_sweep_input_path=prefix_sweep_input,
+    )
     print(f"[green]Wrote report[/green] {output}")
 
 

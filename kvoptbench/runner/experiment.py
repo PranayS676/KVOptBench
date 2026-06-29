@@ -101,6 +101,7 @@ async def run_experiment(config_path: str | Path) -> Path:
             missing_metrics=missing_metrics,
             metadata={
                 "config_metadata": config.metadata,
+                "workload_metadata": item.metadata,
                 "endpoint_health": endpoint_health.model_dump(),
                 "quality_details": quality.details if quality else {},
             },
@@ -163,6 +164,7 @@ def _failed_healthcheck_result(
         ],
         metadata={
             "config_metadata": config.metadata,
+            "workload_metadata": item.metadata,
             "endpoint_health": endpoint_health.model_dump(),
             "quality_details": {},
         },

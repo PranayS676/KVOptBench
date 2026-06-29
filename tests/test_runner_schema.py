@@ -38,7 +38,7 @@ def test_runner_writes_valid_result_rows(tmp_path: Path) -> None:
 
     try:
         generate_to_file(
-            profile="shared_prefix",
+            profile="partial_prefix",
             out=workload_file,
             count=2,
             target_input_tokens=256,
@@ -77,6 +77,7 @@ def test_runner_writes_valid_result_rows(tmp_path: Path) -> None:
             assert result.ttft_ms is not None
             assert result.e2e_latency_ms is not None
             assert result.output_tokens > 0
+            assert "shared_prefix_ratio" in result.metadata["workload_metadata"]
     finally:
         server.should_exit = True
 

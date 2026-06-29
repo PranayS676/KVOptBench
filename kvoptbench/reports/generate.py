@@ -20,6 +20,7 @@ def generate_report(
     input_path: str | Path,
     output_path: str | Path,
     cache_input_path: str | Path | None = None,
+    prefix_sweep_input_path: str | Path | None = None,
 ) -> Path:
     """Generate a markdown report from a summary CSV."""
     input_path = Path(input_path)
@@ -28,6 +29,7 @@ def generate_report(
     if frame.empty:
         raise ValueError(f"Summary CSV is empty: {input_path}")
     cache_frame = _read_cache_summary(cache_input_path)
+    prefix_sweep_frame = _read_prefix_sweep(prefix_sweep_input_path)
 
     total_requests = int(frame["requests"].sum()) if "requests" in frame else 0
     avg_success = frame["success_rate"].mean() if "success_rate" in frame else None
@@ -141,6 +143,7 @@ def generate_report(
         lines.append("| n/a | n/a | n/a | n/a |")
 
     _append_cache_comparison(lines, cache_frame)
+    _append_prefix_overlap_sweep(lines, prefix_sweep_frame)
 
     lines.extend(["", "## Cache Interpretation", ""])
     if "cache_interpretation" in frame.columns:
@@ -196,6 +199,16 @@ def _read_cache_summary(cache_input_path: str | Path | None) -> pd.DataFrame | N
     return cache_frame
 
 
+def _read_prefix_sweep(prefix_sweep_input_path: str | Path | None) -> pd.DataFrame | None:
+    if prefix_sweep_input_path is None:
+        return None
+    prefix_sweep_path = Path(prefix_sweep_input_path)
+    prefix_sweep_frame = pd.read_csv(prefix_sweep_path)
+    if prefix_sweep_frame.empty:
+        return pd.DataFrame()
+    return prefix_sweep_frame
+
+
 def _append_cache_comparison(lines: list[str], cache_frame: pd.DataFrame | None) -> None:
     lines.extend(
         [
@@ -231,13 +244,65 @@ def _append_cache_comparison(lines: list[str], cache_frame: pd.DataFrame | None)
         )
 
 
+def _append_prefix_overlap_sweep(lines: list[str], prefix_sweep_frame: pd.DataFrame | None) -> None:
+    lines.extend(["", "## Prefix Overlap Sweep", ""])
+    if prefix_sweep_frame is None:
+        lines.append("No prefix sweep CSV was provided.")
+        return
+    if prefix_sweep_frame.empty:
+        lines.append("No prefix sweep rows were available.")
+        return
+
+    if "interpretation" in prefix_sweep_frame:
+        meaningful = prefix_sweep_frame[
+            prefix_sweep_frame["interpretation"] == "meaningful_prefix_cache_gain"
+        ]
+    else:
+        meaningful = pd.DataFrame()
+    if meaningful.empty:
+        lines.append("No meaningful cache gain threshold was observed in this sweep.")
+    else:
+        first_ratio = float(
+            meaningful.sort_values("shared_prefix_ratio").iloc[0]["shared_prefix_ratio"]
+        )
+        lines.append(
+            "First meaningful cache gain appears at shared-prefix ratio "
+            f"`{first_ratio:.3f}`."
+        )
+    lines.extend(
+        [
+            "Mock prefix-overlap timings validate benchmark wiring only; use real endpoint runs for engine claims.",
+            "",
+            "| engine | strategy | shared prefix ratio | shared prefix tokens | "
+            "cold TTFT ms | warm TTFT ms | cache gain ms | interpretation |",
+            "|---|---|---:|---:|---:|---:|---:|---|",
+        ]
+    )
+    for _, row in prefix_sweep_frame.iterrows():
+        lines.append(
+            f"| {row.get('engine', 'unknown')} | {row.get('strategy', 'unknown')} | "
+            f"{_fmt(row.get('shared_prefix_ratio'))} | "
+            f"{_fmt(row.get('shared_prefix_tokens'))} | "
+            f"{_fmt(row.get('cold_ttft_ms'))} | "
+            f"{_fmt(row.get('warm_ttft_ms'))} | "
+            f"{_fmt(row.get('cache_gain_ms'))} | "
+            f"{row.get('interpretation', 'unknown')} |"
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a KVOptBench markdown report.")
     parser.add_argument("--input", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--cache-input", type=Path, default=None)
+    parser.add_argument("--prefix-sweep-input", type=Path, default=None)
     args = parser.parse_args()
-    generate_report(input_path=args.input, output_path=args.output, cache_input_path=args.cache_input)
+    generate_report(
+        input_path=args.input,
+        output_path=args.output,
+        cache_input_path=args.cache_input,
+        prefix_sweep_input_path=args.prefix_sweep_input,
+    )
     print(f"Wrote report to {args.output}")
 
 
