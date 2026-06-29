@@ -28,6 +28,7 @@ def test_report_generator_creates_required_sections(tmp_path: Path) -> None:
                 "quality_score_mean": 1.0,
                 "cache_hit_rate_mean": 0.9,
                 "cache_miss_penalty_ms_mean": 250.0,
+                "cache_interpretation": "credible_cache_reuse_signal",
                 "missing_metrics": "gpu_memory_used_gb;gpu_memory_peak_gb",
             }
         ]
@@ -45,6 +46,8 @@ def test_report_generator_creates_required_sections(tmp_path: Path) -> None:
     assert "## Quality Summary" in report
     assert "## Cache Summary" in report
     assert "cache miss penalty ms" in report
+    assert "## Cache Interpretation" in report
+    assert "credible_cache_reuse_signal" in report
     assert "## Missing Metrics Warning" in report
     assert "## Next Steps" in report
     assert "Milestone" not in report

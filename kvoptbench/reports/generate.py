@@ -135,6 +135,23 @@ def generate_report(input_path: str | Path, output_path: str | Path) -> Path:
     else:
         lines.append("| n/a | n/a | n/a | n/a |")
 
+    lines.extend(["", "## Cache Interpretation", ""])
+    if "cache_interpretation" in frame.columns:
+        interpretations = sorted(
+            {
+                str(value)
+                for value in frame["cache_interpretation"].dropna()
+                if str(value).strip()
+            }
+        )
+        if interpretations:
+            for interpretation in interpretations:
+                lines.append(f"- `{interpretation}`")
+        else:
+            lines.append("No cache interpretation was available.")
+    else:
+        lines.append("No cache interpretation was available.")
+
     lines.extend(["", "## Missing Metrics Warning", ""])
     if missing_values:
         lines.append(

@@ -70,6 +70,52 @@ def engine_command_command(
     print(f"Notes: {preview.notes}")
 
 
+@app.command("cache-plan")
+def cache_plan_command(
+    plan_dir: Path = typer.Option(..., "--plan-dir"),
+    experiment_prefix: str = typer.Option(..., "--experiment-prefix"),
+    provider: str = typer.Option(..., "--provider"),
+    engine: str = typer.Option(..., "--engine", "-e"),
+    model_id: str = typer.Option(..., "--model-id", "-m"),
+    base_url: str = typer.Option(..., "--base-url"),
+    shared_workload_file: Path = typer.Option(..., "--shared-workload-file"),
+    random_workload_file: Path = typer.Option(..., "--random-workload-file"),
+    output_dir: Path = typer.Option(..., "--output-dir"),
+    concurrency: int = typer.Option(1, "--concurrency", min=1),
+    max_output_tokens: int = typer.Option(256, "--max-output-tokens", min=1),
+) -> None:
+    """Write cache experiment YAML configs."""
+    from kvoptbench.experiments.cache import write_cache_plan_configs
+
+    written = write_cache_plan_configs(
+        plan_dir=plan_dir,
+        experiment_prefix=experiment_prefix,
+        provider=provider,
+        engine=engine,
+        model_id=model_id,
+        base_url=base_url,
+        shared_workload_file=shared_workload_file,
+        random_workload_file=random_workload_file,
+        output_dir=output_dir,
+        concurrency=concurrency,
+        max_output_tokens=max_output_tokens,
+    )
+    print(f"[green]Wrote {len(written)} cache experiment configs[/green] to {plan_dir}")
+
+
+@app.command("cache-run")
+def cache_run_command(
+    plan_dir: Path = typer.Option(..., "--plan-dir"),
+) -> None:
+    """Run all YAML configs in a cache experiment plan directory."""
+    from kvoptbench.experiments.cache import run_cache_plan
+
+    outputs = run_cache_plan(plan_dir)
+    print(f"[green]Ran {len(outputs)} cache experiment configs[/green]")
+    for output in outputs:
+        print(output)
+
+
 @app.command("generate-workload")
 def generate_workload_command(
     profile: str = typer.Option(..., "--profile", "-p"),
