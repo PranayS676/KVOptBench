@@ -196,6 +196,62 @@ def prefill_decode_compare_command(
     print(f"[green]Wrote prefill/decode comparison[/green] {output}")
 
 
+@app.command("long-context-plan")
+def long_context_plan_command(
+    plan_dir: Path = typer.Option(..., "--plan-dir"),
+    experiment_prefix: str = typer.Option(..., "--experiment-prefix"),
+    provider: str = typer.Option(..., "--provider"),
+    engine: str = typer.Option(..., "--engine", "-e"),
+    model_id: str = typer.Option(..., "--model-id", "-m"),
+    base_url: str = typer.Option(..., "--base-url"),
+    workload_file: Path = typer.Option(..., "--workload-file"),
+    output_dir: Path = typer.Option(..., "--output-dir"),
+    concurrency: int = typer.Option(1, "--concurrency", min=1),
+    max_output_tokens: int = typer.Option(256, "--max-output-tokens", min=1),
+) -> None:
+    """Write long-context pressure experiment YAML configs."""
+    from kvoptbench.experiments.long_context import write_long_context_plan_configs
+
+    written = write_long_context_plan_configs(
+        plan_dir=plan_dir,
+        experiment_prefix=experiment_prefix,
+        provider=provider,
+        engine=engine,
+        model_id=model_id,
+        base_url=base_url,
+        workload_file=workload_file,
+        output_dir=output_dir,
+        concurrency=concurrency,
+        max_output_tokens=max_output_tokens,
+    )
+    print(f"[green]Wrote {len(written)} long-context experiment configs[/green] to {plan_dir}")
+
+
+@app.command("long-context-run")
+def long_context_run_command(
+    plan_dir: Path = typer.Option(..., "--plan-dir"),
+) -> None:
+    """Run all YAML configs in a long-context pressure plan directory."""
+    from kvoptbench.experiments.long_context import run_long_context_plan
+
+    outputs = run_long_context_plan(plan_dir)
+    print(f"[green]Ran {len(outputs)} long-context experiment configs[/green]")
+    for output in outputs:
+        print(output)
+
+
+@app.command("long-context-compare")
+def long_context_compare_command(
+    input: Path = typer.Option(..., "--input", "-i"),
+    output: Path = typer.Option(..., "--output", "-o"),
+) -> None:
+    """Compare long-context timing and throughput metrics by context bucket."""
+    from kvoptbench.analysis.long_context import compare_long_context_results
+
+    compare_long_context_results(input_path=input, output_path=output)
+    print(f"[green]Wrote long-context comparison[/green] {output}")
+
+
 @app.command("generate-workload")
 def generate_workload_command(
     profile: str = typer.Option(..., "--profile", "-p"),
@@ -203,6 +259,11 @@ def generate_workload_command(
     count: int = typer.Option(10, "--count", min=1),
     target_input_tokens: int = typer.Option(32768, "--target-input-tokens", min=1),
     target_output_tokens: int = typer.Option(256, "--target-output-tokens", min=1),
+    context_buckets: str | None = typer.Option(
+        None,
+        "--context-buckets",
+        help="Comma-separated token buckets for long_context_pressure.",
+    ),
 ) -> None:
     """Generate workload JSONL."""
     from kvoptbench.workloads.generate import generate_to_file
@@ -213,6 +274,7 @@ def generate_workload_command(
         count=count,
         target_input_tokens=target_input_tokens,
         target_output_tokens=target_output_tokens,
+        context_buckets=_parse_context_buckets(context_buckets),
     )
     print(f"[green]Wrote[/green] {generated} tasks to {out}")
 
@@ -260,6 +322,7 @@ def report_command(
     cache_input: Path | None = typer.Option(None, "--cache-input"),
     prefix_sweep_input: Path | None = typer.Option(None, "--prefix-sweep-input"),
     prefill_decode_input: Path | None = typer.Option(None, "--prefill-decode-input"),
+    long_context_input: Path | None = typer.Option(None, "--long-context-input"),
 ) -> None:
     """Generate a markdown report from a summary CSV."""
     from kvoptbench.reports.generate import generate_report
@@ -270,6 +333,7 @@ def report_command(
         cache_input_path=cache_input,
         prefix_sweep_input_path=prefix_sweep_input,
         prefill_decode_input_path=prefill_decode_input,
+        long_context_input_path=long_context_input,
     )
     print(f"[green]Wrote report[/green] {output}")
 
@@ -282,6 +346,12 @@ def strategy_select_command(
     from kvoptbench.strategy.selector import select_strategy_from_summary
 
     print(select_strategy_from_summary(input))
+
+
+def _parse_context_buckets(raw: str | None) -> tuple[int, ...] | None:
+    if raw is None or not raw.strip():
+        return None
+    return tuple(int(value.strip()) for value in raw.split(",") if value.strip())
 
 
 if __name__ == "__main__":

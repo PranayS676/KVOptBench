@@ -32,9 +32,16 @@
 
 - Prefill vs decode decomposition
 
+## Done: Long-Context Pressure
+
+- Configurable long-context workload buckets
+- Long-context experiment planning and execution
+- Context-bucket latency and throughput comparison
+- Pressure classification for stable, prefill-growth, throughput-degraded, failed, or insufficient-signal runs
+- Markdown report integration
+
 ## Next: Advanced Inference Experiments
 
-- Long-context pressure sweep
 - KV cache quantization sweep
 - KV offload placeholder/integration
 - Speculative decoding sweep

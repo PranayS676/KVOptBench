@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterable
 from pathlib import Path
 
 from kvoptbench.schemas import WorkloadItem
 from kvoptbench.workloads import (
     agentic,
     decode_heavy,
+    long_context_pressure,
     needle,
     partial_prefix,
     prefill_decode,
@@ -25,6 +27,7 @@ GENERATORS = {
     "decode_heavy": decode_heavy.generate,
     "long_context_needle": needle.generate,
     "needle": needle.generate,
+    "long_context_pressure": long_context_pressure.generate,
     "partial_prefix": partial_prefix.generate,
     "prefill_decode_grid": prefill_decode.generate,
     "rag": rag.generate,
@@ -39,11 +42,21 @@ def generate_items(
     count: int = 10,
     target_input_tokens: int = 32768,
     target_output_tokens: int = 256,
+    context_buckets: Iterable[int] | None = None,
 ) -> list[WorkloadItem]:
     """Generate workload items by profile name."""
     if profile not in GENERATORS:
         valid = ", ".join(sorted(GENERATORS))
         raise ValueError(f"Unknown workload profile '{profile}'. Valid profiles: {valid}")
+    if profile == "long_context_pressure":
+        return list(
+            long_context_pressure.generate(
+                count,
+                target_input_tokens,
+                target_output_tokens,
+                context_buckets=context_buckets,
+            )
+        )
     return list(GENERATORS[profile](count, target_input_tokens, target_output_tokens))
 
 
@@ -54,6 +67,7 @@ def generate_to_file(
     count: int = 10,
     target_input_tokens: int = 32768,
     target_output_tokens: int = 256,
+    context_buckets: Iterable[int] | None = None,
 ) -> int:
     """Generate a workload JSONL file and return the number of rows written."""
     output_path = Path(out)
@@ -63,6 +77,7 @@ def generate_to_file(
         count=count,
         target_input_tokens=target_input_tokens,
         target_output_tokens=target_output_tokens,
+        context_buckets=context_buckets,
     )
     with output_path.open("w", encoding="utf-8") as handle:
         for item in items:
@@ -77,6 +92,11 @@ def main() -> None:
     parser.add_argument("--count", type=int, default=10)
     parser.add_argument("--target-input-tokens", type=int, default=32768)
     parser.add_argument("--target-output-tokens", type=int, default=256)
+    parser.add_argument(
+        "--context-buckets",
+        default=None,
+        help="Comma-separated token buckets for long_context_pressure, e.g. 4096,16384,32768.",
+    )
     args = parser.parse_args()
     written = generate_to_file(
         profile=args.profile,
@@ -84,8 +104,15 @@ def main() -> None:
         count=args.count,
         target_input_tokens=args.target_input_tokens,
         target_output_tokens=args.target_output_tokens,
+        context_buckets=_parse_context_buckets(args.context_buckets),
     )
     print(f"Wrote {written} tasks to {args.out}")
+
+
+def _parse_context_buckets(raw: str | None) -> tuple[int, ...] | None:
+    if raw is None or not raw.strip():
+        return None
+    return tuple(int(value.strip()) for value in raw.split(",") if value.strip())
 
 
 if __name__ == "__main__":

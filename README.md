@@ -37,7 +37,7 @@ KVOptBench is designed to answer deeper questions:
 
 ## Status
 
-Early project. The local/mock benchmark harness, real OpenAI-compatible endpoint runner, engine profiles, cache experiment planning, cache comparison reporting, prefix-overlap sweep analysis, and prefill/decode decomposition are in place.
+Early project. The local/mock benchmark harness, real OpenAI-compatible endpoint runner, engine profiles, cache experiment planning, cache comparison reporting, prefix-overlap sweep analysis, prefill/decode decomposition, and long-context pressure analysis are in place.
 
 ## Local Mock Quickstart
 
@@ -208,6 +208,41 @@ kvoptbench summarize --input results/raw --output results/summary.csv
 kvoptbench prefill-decode-compare --input results/raw --output results/prefill_decode.csv
 kvoptbench report --input results/summary.csv --prefill-decode-input results/prefill_decode.csv --output reports/prefill_decode_report.md
 ```
+
+## Long-Context Pressure
+
+Long-context helpers run the same prompt shape across increasing context buckets and classify whether the observed request-level behavior is stable, prefill-latency dominated, throughput degraded, failed under pressure, or missing enough signal to classify. The default buckets are `4096`, `16384`, `32768`, `65536`, and `131072` tokens. Larger buckets such as `262144`, `524288`, or `1000000` can be supplied for endpoints that support frontier-scale context windows.
+
+```bash
+kvoptbench generate-workload --profile long_context_pressure --count 5 --out workloads/generated/long_context_pressure.jsonl
+
+kvoptbench long-context-plan \
+  --plan-dir configs/long_context_plan \
+  --experiment-prefix long_context \
+  --provider mock \
+  --engine vllm \
+  --model-id mock-frontier-model \
+  --base-url http://127.0.0.1:8000/v1 \
+  --workload-file workloads/generated/long_context_pressure.jsonl \
+  --output-dir results/raw
+
+kvoptbench long-context-run --plan-dir configs/long_context_plan
+kvoptbench summarize --input results/raw --output results/summary.csv
+kvoptbench long-context-compare --input results/raw --output results/long_context.csv
+kvoptbench report --input results/summary.csv --long-context-input results/long_context.csv --output reports/long_context_report.md
+```
+
+For a larger real endpoint sweep, provide explicit buckets:
+
+```bash
+kvoptbench generate-workload \
+  --profile long_context_pressure \
+  --count 6 \
+  --context-buckets 4096,32768,131072,262144,524288,1000000 \
+  --out workloads/generated/long_context_frontier.jsonl
+```
+
+Mock timings validate harness wiring only. Use real vLLM and SGLang endpoint runs before making engine-level claims, and treat unavailable engine/GPU metrics as missing rather than zero.
 
 ## License
 
