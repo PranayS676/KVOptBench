@@ -1,0 +1,26 @@
+experiment_id: generic_openai_compatible_smoke
+official_run: false
+provider: other
+engine: openai_compatible
+endpoint_type: openai_compatible
+model_id: replace-with-your-served-model
+strategy: baseline
+base_url: https://replace-with-endpoint-host/v1
+healthcheck_path: /v1/models
+api_key_env: OPENAI_COMPATIBLE_API_KEY
+workload_file: workloads/generated/shared_prefix_32k.jsonl
+output_file: results/raw/generic_openai_compatible_smoke.jsonl
+concurrency: 1
+request_rate: null
+max_tasks: 5
+max_output_tokens: 256
+timeout_seconds: 120
+request_timeout_seconds: 120
+retries: 2
+retry_backoff_seconds: 0.5
+capture_response_headers: true
+stream: true
+endpoint_metadata:
+  note: Generic OpenAI-compatible endpoint. Set api_key_env to null if auth is not required.
+metadata:
+  description: Public-safe generic endpoint smoke config. Replace base_url and model_id before use.

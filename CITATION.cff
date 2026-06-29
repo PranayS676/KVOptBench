@@ -6,7 +6,7 @@ authors:
   - family-names: Masadi
     given-names: SaiPranay
 license: MIT
-repository-code: https://github.com/YOUR_USERNAME/kvoptbench
+repository-code: https://github.com/PranayS676/KVOptBench
 abstract: KVOptBench is a cache-aware frontier LLM inference benchmark and strategy optimizer for studying KV cache behavior, prefix caching, prefill/decode bottlenecks, KV quantization, KV offload, speculative decoding, and quality-latency tradeoffs.
 keywords:
   - llm-inference

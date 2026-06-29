@@ -5,6 +5,16 @@ from typer.testing import CliRunner
 from kvoptbench.cli import app
 
 
+def test_cli_help_uses_project_level_positioning() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert "cache-aware LLM inference benchmark" in result.stdout
+    assert "local/mock benchmark harness" not in result.stdout
+
+
 def test_engine_command_cli_prints_preview_without_launching() -> None:
     runner = CliRunner()
 

@@ -1,0 +1,26 @@
+experiment_id: runpod_vllm_real_endpoint_smoke
+official_run: false
+provider: runpod
+engine: vllm
+endpoint_type: vllm
+model_id: replace-with-your-served-model
+strategy: baseline
+base_url: https://replace-with-pod-id-8000.proxy.runpod.net/v1
+healthcheck_path: /v1/models
+api_key_env: null
+workload_file: workloads/generated/shared_prefix_32k.jsonl
+output_file: results/raw/runpod_vllm_real_endpoint_smoke.jsonl
+concurrency: 1
+request_rate: null
+max_tasks: 5
+max_output_tokens: 256
+timeout_seconds: 120
+request_timeout_seconds: 90
+retries: 2
+retry_backoff_seconds: 0.5
+capture_response_headers: true
+stream: true
+endpoint_metadata:
+  note: RunPod-hosted vLLM OpenAI-compatible endpoint. KVOptBench does not start the server.
+metadata:
+  description: Public-safe RunPod vLLM smoke config. Replace base_url and model_id before use.

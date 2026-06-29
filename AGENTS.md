@@ -8,17 +8,17 @@ This file defines rules for AI coding agents working on KVOptBench.
 - License: MIT
 - Purpose: cache-aware frontier LLM inference benchmark and strategy optimizer
 - Primary language: Python
-- Initial scope: local/mock benchmark harness before RunPod execution
+- Initial scope: local benchmark harness before remote GPU execution
 
 ## Core Rules
 
 1. Do not turn this project into an inference engine.
 2. Do not build a UI unless explicitly requested.
-3. Do not add Kubernetes in early milestones.
+3. Do not add Kubernetes in early development.
 4. Do not add fine-tuning.
 5. Do not add a vector database.
 6. Do not require RunPod for local tests.
-7. Do not require a GPU for Milestone 1.
+7. Do not require a GPU for the initial local harness.
 8. Do not download frontier model weights during tests.
 9. Do not commit secrets, API keys, Hugging Face tokens, RunPod tokens, or `.env` files.
 10. Do not fake real engine metrics. If a metric is unavailable, store `null` and explain why.
@@ -74,9 +74,9 @@ Every result row should include:
 - quality fields
 - timestamp
 
-## Milestone 1 Priority
+## Initial Local Harness Priority
 
-Milestone 1 must implement:
+The initial local harness must implement:
 
 - mock OpenAI-compatible server
 - workload generation
@@ -87,7 +87,7 @@ Milestone 1 must implement:
 - basic evaluators
 - tests
 
-Do not implement RunPod automation before Milestone 1 is complete.
+Do not implement RunPod automation before the local harness is complete.
 
 ## Testing Rules
 

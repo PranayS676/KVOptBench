@@ -95,4 +95,6 @@ Before publishing real endpoint results, record:
 - `missing_metrics` values
 - whether the run is official or exploratory
 
-RunPod is not required for the public example bundle. Use a RunPod runbook only when you are ready to reproduce the same workflow on remote GPU infrastructure.
+RunPod is not required for the public example bundle. Use `guides/first_real_benchmark.md`
+when you are ready to collect the first real endpoint result package. Use `guides/runpod.md`
+only when the selected endpoint is hosted on RunPod.
