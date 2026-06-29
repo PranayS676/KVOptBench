@@ -1,0 +1,2 @@
+"""Mock OpenAI-compatible server."""
+

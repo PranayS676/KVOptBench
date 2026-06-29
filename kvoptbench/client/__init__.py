@@ -1,0 +1,2 @@
+"""OpenAI-compatible client helpers."""
+
