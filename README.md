@@ -120,6 +120,13 @@ kvoptbench report \
 
 See `guides/reproducibility.md` for the full fresh-clone workflow and interpretation rules.
 
+Additional public release guides:
+
+- `guides/real_endpoint_vllm_sglang.md`
+- `guides/runpod.md`
+- `examples/public_release/result_template.md`
+- `examples/public_release/blog_report_template.md`
+
 ### CLI shortcuts
 
 The installed console command exposes the same workflow:
