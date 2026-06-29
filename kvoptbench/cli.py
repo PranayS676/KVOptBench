@@ -590,10 +590,55 @@ def report_command(
 def strategy_select_command(
     input: Path = typer.Option(..., "--input", "-i"),
 ) -> None:
-    """Run the placeholder strategy selector."""
+    """Run the basic strategy advisor from a summary CSV."""
     from kvoptbench.strategy.selector import select_strategy_from_summary
 
     print(select_strategy_from_summary(input))
+
+
+@app.command("strategy-recommend")
+def strategy_recommend_command(
+    summary: Path = typer.Option(..., "--summary", help="Required summary CSV."),
+    cache_input: Path | None = typer.Option(None, "--cache-input"),
+    prefix_sweep_input: Path | None = typer.Option(None, "--prefix-sweep-input"),
+    prefill_decode_input: Path | None = typer.Option(None, "--prefill-decode-input"),
+    long_context_input: Path | None = typer.Option(None, "--long-context-input"),
+    kv_quant_input: Path | None = typer.Option(None, "--kv-quant-input"),
+    kv_offload_input: Path | None = typer.Option(None, "--kv-offload-input"),
+    spec_decoding_input: Path | None = typer.Option(None, "--spec-decoding-input"),
+    disagg_input: Path | None = typer.Option(None, "--disagg-input"),
+    json_output: Path | None = typer.Option(None, "--json-output"),
+    markdown_output: Path | None = typer.Option(None, "--markdown-output"),
+) -> None:
+    """Generate evidence-based strategy recommendations from comparison CSVs."""
+    from kvoptbench.strategy.advisor import (
+        build_strategy_advisor_report,
+        write_strategy_advisor_outputs,
+    )
+
+    report = build_strategy_advisor_report(
+        summary_path=summary,
+        cache_input_path=cache_input,
+        prefix_sweep_input_path=prefix_sweep_input,
+        prefill_decode_input_path=prefill_decode_input,
+        long_context_input_path=long_context_input,
+        kv_quant_input_path=kv_quant_input,
+        kv_offload_input_path=kv_offload_input,
+        spec_decoding_input_path=spec_decoding_input,
+        disagg_input_path=disagg_input,
+    )
+    written_json, written_markdown = write_strategy_advisor_outputs(
+        report=report,
+        json_output_path=json_output,
+        markdown_output_path=markdown_output,
+    )
+
+    print("[bold]Strategy Advisor[/bold]")
+    print(f"Overall recommendation: [cyan]{report.overall_recommendation}[/cyan]")
+    if written_json is not None:
+        print(f"[green]Wrote JSON[/green] {written_json}")
+    if written_markdown is not None:
+        print(f"[green]Wrote markdown[/green] {written_markdown}")
 
 
 def _parse_context_buckets(raw: str | None) -> tuple[int, ...] | None:

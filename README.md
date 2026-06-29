@@ -37,7 +37,7 @@ KVOptBench is designed to answer deeper questions:
 
 ## Status
 
-Early project. The local/mock benchmark harness, real OpenAI-compatible endpoint runner, engine profiles, cache experiment planning, cache comparison reporting, prefix-overlap sweep analysis, prefill/decode decomposition, long-context pressure analysis, KV cache quantization comparison, KV offload experiment support, speculative decoding sweep support, and prefill/decode disaggregation experiment support are in place.
+Early project. The local/mock benchmark harness, real OpenAI-compatible endpoint runner, engine profiles, cache experiment planning, cache comparison reporting, prefix-overlap sweep analysis, prefill/decode decomposition, long-context pressure analysis, KV cache quantization comparison, KV offload experiment support, speculative decoding sweep support, prefill/decode disaggregation experiment support, and evidence-based strategy advisor are in place.
 
 ## Local Mock Quickstart
 
@@ -96,6 +96,7 @@ kvoptbench generate-workload --profile shared_prefix --out workloads/generated/s
 kvoptbench run --config examples/example_experiment_config.yaml
 kvoptbench summarize --input results/raw --output results/summary.csv
 kvoptbench report --input results/summary.csv --output reports/mock_report.md
+kvoptbench strategy-recommend --summary results/summary.csv --markdown-output reports/strategy_advisor.md
 ```
 
 ## Real Endpoint Mode
@@ -349,6 +350,25 @@ kvoptbench report --input results/summary.csv --disagg-input results/disaggregat
 ```
 
 Mock runs validate the comparison shape only. For real vLLM and SGLang runs, verify the disaggregated deployment topology, routing behavior, model revision, and available backend telemetry before making architecture claims.
+
+## Strategy Advisor
+
+The strategy advisor turns summary and comparison CSVs into ranked recommendations. It is intentionally transparent: every recommendation includes observed evidence, caveats, missing telemetry warnings, and the next experiment to run. It does not manage serving engines or claim backend metrics that were not recorded.
+
+```bash
+kvoptbench strategy-recommend \
+  --summary results/summary.csv \
+  --cache-input results/cache_summary.csv \
+  --prefix-sweep-input results/prefix_sweep.csv \
+  --kv-quant-input results/kv_quantization.csv \
+  --kv-offload-input results/kv_offload.csv \
+  --spec-decoding-input results/speculative_decoding.csv \
+  --disagg-input results/disaggregation.csv \
+  --json-output reports/strategy_advisor.json \
+  --markdown-output reports/strategy_advisor.md
+```
+
+Recommendations currently cover prefix caching, KV quantization, KV offload, speculative decoding, and prefill/decode disaggregation. If a comparison CSV or required metric is unavailable, the advisor reports `needs_more_data` or `inconclusive` with a concrete follow-up instead of fabricating a result.
 
 ## License
 
