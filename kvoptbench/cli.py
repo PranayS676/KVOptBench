@@ -116,6 +116,18 @@ def cache_run_command(
         print(output)
 
 
+@app.command("cache-compare")
+def cache_compare_command(
+    input: Path = typer.Option(..., "--input", "-i"),
+    output: Path = typer.Option(..., "--output", "-o"),
+) -> None:
+    """Compare cache experiment JSONL results against random-prefix controls."""
+    from kvoptbench.analysis.cache_compare import compare_cache_results
+
+    compare_cache_results(input_path=input, output_path=output)
+    print(f"[green]Wrote cache comparison[/green] {output}")
+
+
 @app.command("generate-workload")
 def generate_workload_command(
     profile: str = typer.Option(..., "--profile", "-p"),
@@ -177,11 +189,12 @@ def summarize_command(
 def report_command(
     input: Path = typer.Option(..., "--input", "-i"),
     output: Path = typer.Option(..., "--output", "-o"),
+    cache_input: Path | None = typer.Option(None, "--cache-input"),
 ) -> None:
     """Generate a markdown report from a summary CSV."""
     from kvoptbench.reports.generate import generate_report
 
-    generate_report(input_path=input, output_path=output)
+    generate_report(input_path=input, output_path=output, cache_input_path=cache_input)
     print(f"[green]Wrote report[/green] {output}")
 
 

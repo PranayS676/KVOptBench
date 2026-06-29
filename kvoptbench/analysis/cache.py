@@ -79,7 +79,7 @@ def compare_cache_signal(frame: pd.DataFrame) -> pd.DataFrame:
     if frame.empty:
         return pd.DataFrame()
     enriched = frame.copy()
-    enriched["workload_profile"] = enriched.apply(_workload_profile, axis=1)
+    enriched["workload_profile"] = enriched.apply(infer_workload_profile, axis=1)
     summaries = summarize_cold_warm_ttft(
         enriched,
         group_cols=("engine", "strategy", "workload_profile"),
@@ -110,13 +110,14 @@ def compare_cache_signal(frame: pd.DataFrame) -> pd.DataFrame:
                 "miss_penalty_per_1k_tokens": miss_penalty_per_1k_tokens(
                     shared_penalty, shared.get("shared_prefix_tokens")
                 ),
-                "interpretation": _interpret_signal(shared_penalty, random_penalty),
+                "interpretation": interpret_cache_signal(shared_penalty, random_penalty),
             }
         )
     return pd.DataFrame(rows)
 
 
-def _workload_profile(row) -> str:
+def infer_workload_profile(row) -> str:
+    """Infer shared/random workload role from config metadata or workload naming."""
     metadata = row.get("metadata")
     if isinstance(metadata, dict):
         config_metadata = metadata.get("config_metadata")
@@ -130,7 +131,8 @@ def _workload_profile(row) -> str:
     return workload or "unknown"
 
 
-def _interpret_signal(shared_penalty: float | None, random_penalty: float | None) -> str:
+def interpret_cache_signal(shared_penalty: float | None, random_penalty: float | None) -> str:
+    """Label a cache signal using a random-prefix control when available."""
     if shared_penalty is None:
         return "insufficient_cache_signal"
     if shared_penalty <= 0:
@@ -142,6 +144,14 @@ def _interpret_signal(shared_penalty: float | None, random_penalty: float | None
     if random_penalty >= shared_penalty * 0.75:
         return "likely_confounded_cache_signal"
     return "mixed_cache_signal"
+
+
+def _workload_profile(row) -> str:
+    return infer_workload_profile(row)
+
+
+def _interpret_signal(shared_penalty: float | None, random_penalty: float | None) -> str:
+    return interpret_cache_signal(shared_penalty, random_penalty)
 
 
 def _float_or_none(value) -> float | None:
