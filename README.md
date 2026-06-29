@@ -37,7 +37,7 @@ KVOptBench is designed to answer deeper questions:
 
 ## Status
 
-Early project. The local/mock benchmark harness and real OpenAI-compatible endpoint runner are in place. Current work is focused on engine profiles, cache experiment planning, and reproducible cache ablations.
+Early project. The local/mock benchmark harness, real OpenAI-compatible endpoint runner, engine profiles, cache experiment planning, and cache comparison reporting are in place.
 
 ## Local Mock Quickstart
 
@@ -142,6 +142,27 @@ kvoptbench engine-command --engine sglang --strategy cache_on --model-id your/mo
 ```
 
 Cache experiment helpers build a cold/warm ablation matrix with shared-prefix workloads and random-prefix controls. The benchmark still runs through normal YAML configs and records unavailable engine telemetry as missing rather than inventing metrics.
+
+```bash
+kvoptbench generate-workload --profile shared_prefix --out workloads/generated/shared_prefix_32k.jsonl
+kvoptbench generate-workload --profile random_prefix --out workloads/generated/random_prefix_32k.jsonl
+
+kvoptbench cache-plan \
+  --plan-dir configs/cache_plan \
+  --experiment-prefix cache_exp \
+  --provider mock \
+  --engine vllm \
+  --model-id mock-frontier-model \
+  --base-url http://127.0.0.1:8000/v1 \
+  --shared-workload-file workloads/generated/shared_prefix_32k.jsonl \
+  --random-workload-file workloads/generated/random_prefix_32k.jsonl \
+  --output-dir results/raw
+
+kvoptbench cache-run --plan-dir configs/cache_plan
+kvoptbench summarize --input results/raw --output results/summary.csv
+kvoptbench cache-compare --input results/raw --output results/cache_summary.csv
+kvoptbench report --input results/summary.csv --cache-input results/cache_summary.csv --output reports/cache_report.md
+```
 
 ## License
 

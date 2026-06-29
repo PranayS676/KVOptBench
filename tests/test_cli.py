@@ -1,3 +1,5 @@
+import json
+
 from typer.testing import CliRunner
 
 from kvoptbench.cli import app
@@ -55,3 +57,73 @@ def test_cache_plan_cli_writes_yaml_configs(tmp_path) -> None:
     assert result.exit_code == 0
     assert "Wrote 8 cache experiment configs" in result.stdout
     assert len(list((tmp_path / "plan").glob("*.yaml"))) == 8
+
+
+def test_cache_compare_cli_writes_cache_summary(tmp_path) -> None:
+    runner = CliRunner()
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    output = tmp_path / "cache_summary.csv"
+    rows = [
+        _cache_row("shared_prefix_long_doc", "cold", 300.0, 10000, "shared_prefix"),
+        _cache_row("shared_prefix_long_doc", "warm", 100.0, 10000, "shared_prefix"),
+        _cache_row("random_prefix_control", "cold", 280.0, 0, "random_prefix"),
+        _cache_row("random_prefix_control", "warm", 270.0, 0, "random_prefix"),
+    ]
+    (raw_dir / "results.jsonl").write_text(
+        "\n".join(json.dumps(row) for row in rows),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "cache-compare",
+            "--input",
+            str(raw_dir),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Wrote cache comparison" in result.stdout
+    assert output.exists()
+
+
+def _cache_row(
+    workload: str,
+    cache_state: str,
+    ttft_ms: float,
+    shared_prefix_tokens: int,
+    workload_profile: str,
+) -> dict:
+    return {
+        "run_id": "run",
+        "experiment_id": f"{workload}_{cache_state}",
+        "provider": "mock",
+        "engine": "vllm",
+        "model_id": "mock-frontier-model",
+        "strategy": "cache_on",
+        "workload": workload,
+        "task_id": f"{workload}_{cache_state}",
+        "concurrency": 1,
+        "input_tokens": 100,
+        "output_tokens": 10,
+        "target_input_tokens": 100,
+        "target_output_tokens": 10,
+        "shared_prefix_tokens": shared_prefix_tokens,
+        "cache_state": cache_state,
+        "ttft_ms": ttft_ms,
+        "tpot_ms": 10.0,
+        "itl_ms": 10.0,
+        "e2e_latency_ms": ttft_ms + 100.0,
+        "success": True,
+        "missing_metrics": [],
+        "metadata": {
+            "config_metadata": {
+                "cache_experiment": True,
+                "workload_profile": workload_profile,
+            }
+        },
+    }

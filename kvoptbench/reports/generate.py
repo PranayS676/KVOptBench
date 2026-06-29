@@ -16,13 +16,18 @@ def _fmt(value) -> str:
     return str(value)
 
 
-def generate_report(input_path: str | Path, output_path: str | Path) -> Path:
+def generate_report(
+    input_path: str | Path,
+    output_path: str | Path,
+    cache_input_path: str | Path | None = None,
+) -> Path:
     """Generate a markdown report from a summary CSV."""
     input_path = Path(input_path)
     output_path = Path(output_path)
     frame = pd.read_csv(input_path)
     if frame.empty:
         raise ValueError(f"Summary CSV is empty: {input_path}")
+    cache_frame = _read_cache_summary(cache_input_path)
 
     total_requests = int(frame["requests"].sum()) if "requests" in frame else 0
     avg_success = frame["success_rate"].mean() if "success_rate" in frame else None
@@ -135,6 +140,8 @@ def generate_report(input_path: str | Path, output_path: str | Path) -> Path:
     else:
         lines.append("| n/a | n/a | n/a | n/a |")
 
+    _append_cache_comparison(lines, cache_frame)
+
     lines.extend(["", "## Cache Interpretation", ""])
     if "cache_interpretation" in frame.columns:
         interpretations = sorted(
@@ -179,12 +186,58 @@ def generate_report(input_path: str | Path, output_path: str | Path) -> Path:
     return output_path
 
 
+def _read_cache_summary(cache_input_path: str | Path | None) -> pd.DataFrame | None:
+    if cache_input_path is None:
+        return None
+    cache_path = Path(cache_input_path)
+    cache_frame = pd.read_csv(cache_path)
+    if cache_frame.empty:
+        return pd.DataFrame()
+    return cache_frame
+
+
+def _append_cache_comparison(lines: list[str], cache_frame: pd.DataFrame | None) -> None:
+    lines.extend(
+        [
+            "",
+            "## Cache Comparison",
+            "",
+        ]
+    )
+    if cache_frame is None:
+        lines.append("No cache comparison CSV was provided.")
+        return
+    if cache_frame.empty:
+        lines.append("No cache comparison rows were available.")
+        return
+
+    lines.extend(
+        [
+            "Mock cache timings validate benchmark wiring only; use real endpoint runs for engine claims.",
+            "",
+            "| engine | strategy | shared cold TTFT ms | shared warm TTFT ms | "
+            "random penalty ms | control-adjusted gain ms | interpretation |",
+            "|---|---|---:|---:|---:|---:|---|",
+        ]
+    )
+    for _, row in cache_frame.iterrows():
+        lines.append(
+            f"| {row.get('engine', 'unknown')} | {row.get('strategy', 'unknown')} | "
+            f"{_fmt(row.get('shared_cold_ttft_ms'))} | "
+            f"{_fmt(row.get('shared_warm_ttft_ms'))} | "
+            f"{_fmt(row.get('random_cache_miss_penalty_ms'))} | "
+            f"{_fmt(row.get('control_adjusted_cache_gain_ms'))} | "
+            f"{row.get('interpretation', 'unknown')} |"
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a KVOptBench markdown report.")
     parser.add_argument("--input", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--cache-input", type=Path, default=None)
     args = parser.parse_args()
-    generate_report(input_path=args.input, output_path=args.output)
+    generate_report(input_path=args.input, output_path=args.output, cache_input_path=args.cache_input)
     print(f"Wrote report to {args.output}")
 
 

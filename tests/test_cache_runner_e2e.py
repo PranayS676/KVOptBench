@@ -5,8 +5,11 @@ from pathlib import Path
 
 import uvicorn
 
+from kvoptbench.analysis.cache_compare import compare_cache_results
+from kvoptbench.analysis.summarize import summarize_results
 from kvoptbench.experiments.cache import run_cache_plan, write_cache_plan_configs
 from kvoptbench.mock_server.main import create_app
+from kvoptbench.reports.generate import generate_report
 from kvoptbench.workloads.generate import generate_to_file
 
 
@@ -78,5 +81,21 @@ def test_cache_plan_runs_against_mock_server_and_records_cold_warm(tmp_path: Pat
         ]
         assert {row["cache_state"] for row in shared_rows} == {"cold", "warm"}
         assert all(row["metadata"]["config_metadata"]["cache_experiment"] for row in rows)
+
+        summary = summarize_results(input_path=raw_dir, output_path=tmp_path / "summary.csv")
+        cache_summary = compare_cache_results(
+            input_path=raw_dir,
+            output_path=tmp_path / "cache_summary.csv",
+        )
+        report = generate_report(
+            input_path=summary,
+            output_path=tmp_path / "report.md",
+            cache_input_path=cache_summary,
+        )
+
+        report_text = report.read_text(encoding="utf-8")
+        assert "## Cache Comparison" in report_text
+        assert "interpretation" in report_text
+        assert "mock,vllm,mock-frontier-model,cache_on" in cache_summary.read_text(encoding="utf-8")
     finally:
         server.should_exit = True
