@@ -34,6 +34,7 @@ workloads/generated/*
 *.csv
 *.parquet
 *.log
+reports/*.md
 
 # Keep placeholder dirs
 !results/raw/.gitkeep
