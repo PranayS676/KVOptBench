@@ -2,6 +2,7 @@ import pandas as pd
 
 from kvoptbench.analysis.cache import (
     cache_miss_penalty_ms,
+    compare_cache_signal,
     miss_penalty_per_1k_tokens,
     prefix_cache_speedup,
     summarize_cold_warm_ttft,
@@ -57,4 +58,75 @@ def test_summarize_cold_warm_ttft_groups_cache_runs() -> None:
     assert row["warm_ttft_ms_mean"] == 100.0
     assert row["cache_miss_penalty_ms"] == 200.0
     assert row["miss_penalty_per_1k_tokens"] == 20.0
+
+
+def test_compare_cache_signal_interprets_shared_vs_random_controls() -> None:
+    frame = pd.DataFrame(
+        [
+            {
+                "engine": "vllm",
+                "strategy": "cache_on",
+                "workload": "shared_prefix_long_doc",
+                "cache_state": "cold",
+                "ttft_ms": 300.0,
+                "shared_prefix_tokens": 10000,
+                "metadata": {
+                    "config_metadata": {
+                        "workload_profile": "shared_prefix",
+                        "cache_pass": "cold",
+                    }
+                },
+            },
+            {
+                "engine": "vllm",
+                "strategy": "cache_on",
+                "workload": "shared_prefix_long_doc",
+                "cache_state": "warm",
+                "ttft_ms": 100.0,
+                "shared_prefix_tokens": 10000,
+                "metadata": {
+                    "config_metadata": {
+                        "workload_profile": "shared_prefix",
+                        "cache_pass": "warm",
+                    }
+                },
+            },
+            {
+                "engine": "vllm",
+                "strategy": "cache_on",
+                "workload": "random_prefix_control",
+                "cache_state": "cold",
+                "ttft_ms": 290.0,
+                "shared_prefix_tokens": 0,
+                "metadata": {
+                    "config_metadata": {
+                        "workload_profile": "random_prefix",
+                        "cache_pass": "cold",
+                    }
+                },
+            },
+            {
+                "engine": "vllm",
+                "strategy": "cache_on",
+                "workload": "random_prefix_control",
+                "cache_state": "warm",
+                "ttft_ms": 275.0,
+                "shared_prefix_tokens": 0,
+                "metadata": {
+                    "config_metadata": {
+                        "workload_profile": "random_prefix",
+                        "cache_pass": "warm",
+                    }
+                },
+            },
+        ]
+    )
+
+    comparison = compare_cache_signal(frame)
+
+    assert len(comparison) == 1
+    row = comparison.iloc[0]
+    assert row["shared_cache_miss_penalty_ms"] == 200.0
+    assert row["random_cache_miss_penalty_ms"] == 15.0
+    assert row["interpretation"] == "credible_cache_reuse_signal"
 

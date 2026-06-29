@@ -17,6 +17,7 @@ from kvoptbench.workloads.generate import generate_items, generate_to_file
         "rag",
         "tool_calling",
         "agentic_coding",
+        "partial_prefix",
     ],
 )
 def test_generate_profiles_return_valid_items(profile: str) -> None:
@@ -60,6 +61,21 @@ def test_random_prefix_control_has_no_shared_prefix() -> None:
     assert all(item.prefix_group_id is None for item in items)
     assert all(item.shared_prefix_tokens == 0 for item in items)
     assert len({item.prompt for item in items}) == 4
+
+
+def test_partial_prefix_workload_covers_expected_ratios() -> None:
+    items = generate_items(
+        profile="partial_prefix",
+        count=6,
+        target_input_tokens=1000,
+        target_output_tokens=64,
+    )
+
+    ratios = [item.metadata["shared_prefix_ratio"] for item in items]
+    assert ratios == [0.0, 0.25, 0.5, 0.75, 0.9, 1.0]
+    assert [item.shared_prefix_tokens for item in items] == [0, 250, 500, 750, 900, 1000]
+    assert items[0].prefix_group_id is None
+    assert all(item.prefix_group_id == "partial_prefix_doc_001" for item in items[1:])
 
 
 def test_needle_workload_contains_expected_answer() -> None:
