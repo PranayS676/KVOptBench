@@ -56,12 +56,16 @@
 - Missing telemetry preservation for unavailable memory metrics
 - Markdown report integration
 
-## Next: Advanced Inference Experiments
+## Done: Advanced Inference Experiments
 
-- Speculative decoding sweep
-- Prefill/decode disaggregation placeholder/integration
+- Baseline vs speculative decoding planning and comparison
+- Decode-heavy workload sweep support for speculative decoding
+- Baseline vs prefill/decode disaggregation planning and comparison
+- Prefill/decode grid comparison for disaggregation behavior
+- vLLM and SGLang placeholder strategy profiles for backend-specific setups
+- Markdown report integration
 
-## Later: Strategy Optimizer
+## Next: Strategy Optimizer
 
 - Workload feature extraction
 - Strategy recommendation rules

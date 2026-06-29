@@ -18,6 +18,7 @@ def test_engine_registry_includes_vllm_and_sglang_with_matching_core_strategies(
             "kv_fp8",
             "kv_offload",
             "speculative_decoding",
+            "prefill_decode_disaggregation",
         }.issubset(strategy_names)
 
 
@@ -74,4 +75,26 @@ def test_render_kv_offload_command_is_marked_as_placeholder() -> None:
         assert preview.strategy == "kv_offload"
         assert "<kv-offload-flags>" in preview.command
         assert "engine-specific validation" in preview.notes
+
+
+def test_render_advanced_inference_commands_are_marked_as_placeholders() -> None:
+    speculative = render_command_preview(
+        engine="vllm",
+        strategy="speculative_decoding",
+        model_id="example/model",
+    )
+    assert speculative.strategy == "speculative_decoding"
+    assert "<draft-model>" in speculative.command
+    assert "engine-specific validation" in speculative.notes
+
+    for engine in ["vllm", "sglang"]:
+        disaggregation = render_command_preview(
+            engine=engine,
+            strategy="prefill_decode_disaggregation",
+            model_id="example/model",
+        )
+
+        assert disaggregation.strategy == "prefill_decode_disaggregation"
+        assert "<prefill-decode-disaggregation-flags>" in disaggregation.command
+        assert "engine-specific validation" in disaggregation.notes
 

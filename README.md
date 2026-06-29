@@ -37,7 +37,7 @@ KVOptBench is designed to answer deeper questions:
 
 ## Status
 
-Early project. The local/mock benchmark harness, real OpenAI-compatible endpoint runner, engine profiles, cache experiment planning, cache comparison reporting, prefix-overlap sweep analysis, prefill/decode decomposition, long-context pressure analysis, KV cache quantization comparison, and KV offload experiment support are in place.
+Early project. The local/mock benchmark harness, real OpenAI-compatible endpoint runner, engine profiles, cache experiment planning, cache comparison reporting, prefix-overlap sweep analysis, prefill/decode decomposition, long-context pressure analysis, KV cache quantization comparison, KV offload experiment support, speculative decoding sweep support, and prefill/decode disaggregation experiment support are in place.
 
 ## Local Mock Quickstart
 
@@ -295,6 +295,60 @@ kvoptbench report --input results/summary.csv --kv-offload-input results/kv_offl
 ```
 
 Mock runs validate the comparison shape only. For real vLLM and SGLang runs, verify offload flags, model support, host/device memory telemetry, and transfer bottleneck visibility before making capacity or latency claims. Missing memory telemetry remains unavailable rather than being treated as zero.
+
+## Speculative Decoding
+
+Speculative decoding helpers compare a baseline run against `speculative_decoding` on decode-heavy workloads. KVOptBench measures latency, output throughput, success rate, quality, and missing backend-specific telemetry without claiming draft-model acceptance metrics unless the endpoint exposes them.
+
+The built-in vLLM and SGLang speculative decoding profiles are placeholders. Replace `<draft-model>` and any algorithm flags with a supported backend setup before official real-endpoint runs.
+
+```bash
+kvoptbench generate-workload --profile decode_heavy --count 5 --out workloads/generated/decode_heavy.jsonl
+
+kvoptbench spec-decoding-plan \
+  --plan-dir configs/spec_decoding_plan \
+  --experiment-prefix spec_decode \
+  --provider mock \
+  --engine vllm \
+  --model-id mock-frontier-model \
+  --base-url http://127.0.0.1:8000/v1 \
+  --workload-file workloads/generated/decode_heavy.jsonl \
+  --output-dir results/raw
+
+kvoptbench spec-decoding-run --plan-dir configs/spec_decoding_plan
+kvoptbench summarize --input results/raw --output results/summary.csv
+kvoptbench spec-decoding-compare --input results/raw --output results/speculative_decoding.csv
+kvoptbench report --input results/summary.csv --spec-decoding-input results/speculative_decoding.csv --output reports/speculative_decoding_report.md
+```
+
+Mock runs validate the comparison shape only. For real vLLM and SGLang runs, verify draft-model compatibility, speculative algorithm flags, and any exposed acceptance-rate telemetry before interpreting performance gains.
+
+## Prefill/Decode Disaggregation
+
+Prefill/decode disaggregation helpers compare a baseline run against `prefill_decode_disaggregation` on the prefill/decode grid workload. KVOptBench measures TTFT, TPOT, ITL, E2E latency, output throughput, quality, success rate, and missing telemetry by input/output bucket. It does not launch, coordinate, or implement disaggregated serving.
+
+The built-in vLLM and SGLang disaggregation profiles are placeholders. Replace `<prefill-decode-disaggregation-flags>` with the backend-specific multi-process or disaggregated serving setup before official real-endpoint runs.
+
+```bash
+kvoptbench generate-workload --profile prefill_decode_grid --count 12 --out workloads/generated/prefill_decode_grid.jsonl
+
+kvoptbench disagg-plan \
+  --plan-dir configs/disagg_plan \
+  --experiment-prefix disagg \
+  --provider mock \
+  --engine vllm \
+  --model-id mock-frontier-model \
+  --base-url http://127.0.0.1:8000/v1 \
+  --workload-file workloads/generated/prefill_decode_grid.jsonl \
+  --output-dir results/raw
+
+kvoptbench disagg-run --plan-dir configs/disagg_plan
+kvoptbench summarize --input results/raw --output results/summary.csv
+kvoptbench disagg-compare --input results/raw --output results/disaggregation.csv
+kvoptbench report --input results/summary.csv --disagg-input results/disaggregation.csv --output reports/disaggregation_report.md
+```
+
+Mock runs validate the comparison shape only. For real vLLM and SGLang runs, verify the disaggregated deployment topology, routing behavior, model revision, and available backend telemetry before making architecture claims.
 
 ## License
 
