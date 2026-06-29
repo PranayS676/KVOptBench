@@ -45,6 +45,16 @@ def _vllm_profile() -> EngineProfile:
                 command_template=base + " --kv-cache-dtype fp8",
                 notes=["Validate model and engine support before treating results as official."],
             ),
+            "kv_offload": EngineStrategyProfile(
+                name="kv_offload",
+                description="vLLM KV offload preview.",
+                command_template=base + " <kv-offload-flags>",
+                notes=[
+                    "Replace <kv-offload-flags> with supported offload or cache-transfer flags "
+                    "for the installed vLLM version before official runs.",
+                ],
+                placeholder=True,
+            ),
             "speculative_decoding": EngineStrategyProfile(
                 name="speculative_decoding",
                 description="vLLM speculative decoding preview.",
@@ -87,6 +97,16 @@ def _sglang_profile() -> EngineProfile:
                 description="SGLang FP8 KV cache preview.",
                 command_template=base + " --kv-cache-dtype fp8_e5m2",
                 notes=["Validate supported KV cache dtype values for the installed SGLang version."],
+            ),
+            "kv_offload": EngineStrategyProfile(
+                name="kv_offload",
+                description="SGLang KV offload preview.",
+                command_template=base + " <kv-offload-flags>",
+                notes=[
+                    "Replace <kv-offload-flags> with supported offload or cache-transfer flags "
+                    "for the installed SGLang version before official runs.",
+                ],
+                placeholder=True,
             ),
             "speculative_decoding": EngineStrategyProfile(
                 name="speculative_decoding",

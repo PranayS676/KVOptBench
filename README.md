@@ -37,7 +37,7 @@ KVOptBench is designed to answer deeper questions:
 
 ## Status
 
-Early project. The local/mock benchmark harness, real OpenAI-compatible endpoint runner, engine profiles, cache experiment planning, cache comparison reporting, prefix-overlap sweep analysis, prefill/decode decomposition, long-context pressure analysis, and KV cache quantization comparison are in place.
+Early project. The local/mock benchmark harness, real OpenAI-compatible endpoint runner, engine profiles, cache experiment planning, cache comparison reporting, prefix-overlap sweep analysis, prefill/decode decomposition, long-context pressure analysis, KV cache quantization comparison, and KV offload experiment support are in place.
 
 ## Local Mock Quickstart
 
@@ -268,6 +268,33 @@ kvoptbench report --input results/summary.csv --kv-quant-input results/kv_quanti
 ```
 
 Mock runs validate the comparison shape only. For real vLLM and SGLang runs, verify the engine flags, model support, and any reported GPU/KV memory telemetry before interpreting capacity benefits. Missing memory telemetry remains unavailable rather than being treated as zero.
+
+## KV Offload
+
+KV offload helpers compare a baseline run against a `kv_offload` strategy using the same long-context workload shape. This is benchmark-layer support only: KVOptBench writes configs, runs the endpoint, compares latency/throughput/quality/memory deltas, and preserves missing telemetry. It does not implement offload or manage backend server lifecycle.
+
+The built-in vLLM and SGLang `kv_offload` engine profiles are placeholders. Replace `<kv-offload-flags>` with flags supported by the installed backend version before official real-endpoint runs.
+
+```bash
+kvoptbench generate-workload --profile long_context_pressure --count 5 --out workloads/generated/long_context_pressure.jsonl
+
+kvoptbench kv-offload-plan \
+  --plan-dir configs/kv_offload_plan \
+  --experiment-prefix kv_offload \
+  --provider mock \
+  --engine vllm \
+  --model-id mock-frontier-model \
+  --base-url http://127.0.0.1:8000/v1 \
+  --workload-file workloads/generated/long_context_pressure.jsonl \
+  --output-dir results/raw
+
+kvoptbench kv-offload-run --plan-dir configs/kv_offload_plan
+kvoptbench summarize --input results/raw --output results/summary.csv
+kvoptbench kv-offload-compare --input results/raw --output results/kv_offload.csv
+kvoptbench report --input results/summary.csv --kv-offload-input results/kv_offload.csv --output reports/kv_offload_report.md
+```
+
+Mock runs validate the comparison shape only. For real vLLM and SGLang runs, verify offload flags, model support, host/device memory telemetry, and transfer bottleneck visibility before making capacity or latency claims. Missing memory telemetry remains unavailable rather than being treated as zero.
 
 ## License
 

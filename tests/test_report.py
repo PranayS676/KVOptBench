@@ -381,3 +381,75 @@ def test_report_generator_includes_optional_kv_quantization(tmp_path: Path) -> N
     assert "memory delta %" in report
     assert "Mock KV quantization timings validate benchmark wiring only" in report
 
+
+def test_report_generator_includes_optional_kv_offload(tmp_path: Path) -> None:
+    summary = tmp_path / "summary.csv"
+    kv_offload = tmp_path / "kv_offload.csv"
+    output = tmp_path / "report.md"
+    pd.DataFrame(
+        [
+            {
+                "experiment_id": "exp",
+                "provider": "mock",
+                "engine": "vllm",
+                "model_id": "model",
+                "strategy": "kv_offload",
+                "workload": "long_context_pressure",
+                "concurrency": 1,
+                "requests": 3,
+                "success_rate": 1.0,
+                "ttft_ms_p50": 100.0,
+                "ttft_ms_p95": 120.0,
+                "e2e_latency_ms_p50": 200.0,
+                "e2e_latency_ms_p95": 240.0,
+                "output_tokens_per_second_mean": 20.0,
+                "quality_score_mean": 0.99,
+                "missing_metrics": "",
+            }
+        ]
+    ).to_csv(summary, index=False)
+    pd.DataFrame(
+        [
+            {
+                "provider": "mock",
+                "engine": "vllm",
+                "model_id": "model",
+                "workload": "long_context_pressure",
+                "context_token_bucket": 32768,
+                "baseline_strategy": "baseline",
+                "offload_strategy": "kv_offload",
+                "baseline_ttft_ms_p50": 500.0,
+                "offload_ttft_ms_p50": 520.0,
+                "ttft_delta_pct": 4.0,
+                "baseline_e2e_latency_ms_p50": 1000.0,
+                "offload_e2e_latency_ms_p50": 1050.0,
+                "e2e_delta_pct": 5.0,
+                "baseline_output_tokens_per_second_mean": 60.0,
+                "offload_output_tokens_per_second_mean": 61.0,
+                "throughput_delta_pct": 1.667,
+                "baseline_quality_score_mean": 1.0,
+                "offload_quality_score_mean": 0.99,
+                "quality_delta": -0.01,
+                "baseline_gpu_memory_peak_gb": 24.0,
+                "offload_gpu_memory_peak_gb": 14.0,
+                "memory_delta_pct": -41.667,
+                "missing_metrics": "",
+                "requests": 2,
+                "baseline_success_rate": 1.0,
+                "offload_success_rate": 1.0,
+                "offload_interpretation": "offload_promising",
+            }
+        ]
+    ).to_csv(kv_offload, index=False)
+
+    generate_report(
+        input_path=summary,
+        output_path=output,
+        kv_offload_input_path=kv_offload,
+    )
+
+    report = output.read_text(encoding="utf-8")
+    assert "## KV Offload" in report
+    assert "offload_promising" in report
+    assert "memory delta %" in report
+    assert "Mock KV offload timings validate benchmark wiring only" in report

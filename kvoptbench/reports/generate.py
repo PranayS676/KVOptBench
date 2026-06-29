@@ -24,6 +24,7 @@ def generate_report(
     prefill_decode_input_path: str | Path | None = None,
     long_context_input_path: str | Path | None = None,
     kv_quant_input_path: str | Path | None = None,
+    kv_offload_input_path: str | Path | None = None,
 ) -> Path:
     """Generate a markdown report from a summary CSV."""
     input_path = Path(input_path)
@@ -36,6 +37,7 @@ def generate_report(
     prefill_decode_frame = _read_prefill_decode(prefill_decode_input_path)
     long_context_frame = _read_long_context(long_context_input_path)
     kv_quant_frame = _read_kv_quantization(kv_quant_input_path)
+    kv_offload_frame = _read_kv_offload(kv_offload_input_path)
 
     total_requests = int(frame["requests"].sum()) if "requests" in frame else 0
     avg_success = frame["success_rate"].mean() if "success_rate" in frame else None
@@ -153,6 +155,7 @@ def generate_report(
     _append_prefill_decode(lines, prefill_decode_frame)
     _append_long_context(lines, long_context_frame)
     _append_kv_quantization(lines, kv_quant_frame)
+    _append_kv_offload(lines, kv_offload_frame)
 
     lines.extend(["", "## Cache Interpretation", ""])
     if "cache_interpretation" in frame.columns:
@@ -246,6 +249,16 @@ def _read_kv_quantization(kv_quant_input_path: str | Path | None) -> pd.DataFram
     if kv_quant_frame.empty:
         return pd.DataFrame()
     return kv_quant_frame
+
+
+def _read_kv_offload(kv_offload_input_path: str | Path | None) -> pd.DataFrame | None:
+    if kv_offload_input_path is None:
+        return None
+    kv_offload_path = Path(kv_offload_input_path)
+    kv_offload_frame = pd.read_csv(kv_offload_path)
+    if kv_offload_frame.empty:
+        return pd.DataFrame()
+    return kv_offload_frame
 
 
 def _append_cache_comparison(lines: list[str], cache_frame: pd.DataFrame | None) -> None:
@@ -434,6 +447,57 @@ def _append_kv_quantization(lines: list[str], kv_quant_frame: pd.DataFrame | Non
         )
 
 
+def _append_kv_offload(lines: list[str], kv_offload_frame: pd.DataFrame | None) -> None:
+    lines.extend(["", "## KV Offload", ""])
+    if kv_offload_frame is None:
+        lines.append("No KV offload CSV was provided.")
+        return
+    if kv_offload_frame.empty:
+        lines.append("No KV offload rows were available.")
+        return
+
+    interpretations = sorted(
+        {
+            str(value)
+            for value in kv_offload_frame.get(
+                "offload_interpretation", pd.Series(dtype=str)
+            ).dropna()
+            if str(value).strip()
+        }
+    )
+    if interpretations:
+        lines.append(
+            "Observed offload interpretations: "
+            + ", ".join(f"`{interpretation}`" for interpretation in interpretations)
+            + "."
+        )
+    else:
+        lines.append("No offload interpretations were available.")
+    lines.extend(
+        [
+            "Mock KV offload timings validate benchmark wiring only; use real endpoint runs for engine claims.",
+            "",
+            "| engine | workload | context bucket | baseline | offload | "
+            "TTFT delta % | E2E delta % | throughput delta % | quality delta | "
+            "memory delta % | interpretation |",
+            "|---|---|---:|---|---|---:|---:|---:|---:|---:|---|",
+        ]
+    )
+    for _, row in kv_offload_frame.iterrows():
+        lines.append(
+            f"| {row.get('engine', 'unknown')} | {row.get('workload', 'unknown')} | "
+            f"{_fmt(row.get('context_token_bucket'))} | "
+            f"{row.get('baseline_strategy', 'baseline')} | "
+            f"{row.get('offload_strategy', 'unknown')} | "
+            f"{_fmt(row.get('ttft_delta_pct'))} | "
+            f"{_fmt(row.get('e2e_delta_pct'))} | "
+            f"{_fmt(row.get('throughput_delta_pct'))} | "
+            f"{_fmt(row.get('quality_delta'))} | "
+            f"{_fmt(row.get('memory_delta_pct'))} | "
+            f"{row.get('offload_interpretation', 'unknown')} |"
+        )
+
+
 def _append_prefix_overlap_sweep(lines: list[str], prefix_sweep_frame: pd.DataFrame | None) -> None:
     lines.extend(["", "## Prefix Overlap Sweep", ""])
     if prefix_sweep_frame is None:
@@ -489,6 +553,7 @@ def main() -> None:
     parser.add_argument("--prefill-decode-input", type=Path, default=None)
     parser.add_argument("--long-context-input", type=Path, default=None)
     parser.add_argument("--kv-quant-input", type=Path, default=None)
+    parser.add_argument("--kv-offload-input", type=Path, default=None)
     args = parser.parse_args()
     generate_report(
         input_path=args.input,
@@ -498,6 +563,7 @@ def main() -> None:
         prefill_decode_input_path=args.prefill_decode_input,
         long_context_input_path=args.long_context_input,
         kv_quant_input_path=args.kv_quant_input,
+        kv_offload_input_path=args.kv_offload_input,
     )
     print(f"Wrote report to {args.output}")
 
