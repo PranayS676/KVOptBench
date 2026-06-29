@@ -244,3 +244,67 @@ def test_report_generator_includes_optional_prefill_decode(tmp_path: Path) -> No
     assert "prefill_bound" in report
     assert "Mock prefill/decode timings validate benchmark wiring only" in report
 
+
+def test_report_generator_includes_optional_long_context(tmp_path: Path) -> None:
+    summary = tmp_path / "summary.csv"
+    long_context = tmp_path / "long_context.csv"
+    output = tmp_path / "report.md"
+    pd.DataFrame(
+        [
+            {
+                "experiment_id": "exp",
+                "provider": "mock",
+                "engine": "vllm",
+                "model_id": "model",
+                "strategy": "baseline",
+                "workload": "long_context_pressure",
+                "concurrency": 1,
+                "requests": 3,
+                "success_rate": 1.0,
+                "ttft_ms_p50": 100.0,
+                "ttft_ms_p95": 120.0,
+                "e2e_latency_ms_p50": 200.0,
+                "e2e_latency_ms_p95": 240.0,
+                "output_tokens_per_second_mean": 20.0,
+                "quality_score_mean": 1.0,
+                "missing_metrics": "",
+            }
+        ]
+    ).to_csv(summary, index=False)
+    pd.DataFrame(
+        [
+            {
+                "provider": "mock",
+                "engine": "vllm",
+                "model_id": "model",
+                "strategy": "baseline",
+                "context_token_bucket": 32768,
+                "pressure_level": "high",
+                "expected_pressure": "prefill_latency_growth",
+                "ttft_ms_p50": 700.0,
+                "ttft_ms_p95": 720.0,
+                "e2e_latency_ms_p50": 920.0,
+                "e2e_latency_ms_p95": 960.0,
+                "input_tokens_per_second_mean": 12000.0,
+                "output_tokens_per_second_mean": 60.0,
+                "pressure_classification": "prefill_latency_growth",
+                "missing_metrics": "",
+                "requests": 1,
+                "success_rate": 1.0,
+                "error_rate": 0.0,
+            }
+        ]
+    ).to_csv(long_context, index=False)
+
+    generate_report(
+        input_path=summary,
+        output_path=output,
+        long_context_input_path=long_context,
+    )
+
+    report = output.read_text(encoding="utf-8")
+    assert "## Long Context Pressure" in report
+    assert "context bucket" in report
+    assert "prefill_latency_growth" in report
+    assert "Mock long-context timings validate benchmark wiring only" in report
+

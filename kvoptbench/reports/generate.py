@@ -22,6 +22,7 @@ def generate_report(
     cache_input_path: str | Path | None = None,
     prefix_sweep_input_path: str | Path | None = None,
     prefill_decode_input_path: str | Path | None = None,
+    long_context_input_path: str | Path | None = None,
 ) -> Path:
     """Generate a markdown report from a summary CSV."""
     input_path = Path(input_path)
@@ -32,6 +33,7 @@ def generate_report(
     cache_frame = _read_cache_summary(cache_input_path)
     prefix_sweep_frame = _read_prefix_sweep(prefix_sweep_input_path)
     prefill_decode_frame = _read_prefill_decode(prefill_decode_input_path)
+    long_context_frame = _read_long_context(long_context_input_path)
 
     total_requests = int(frame["requests"].sum()) if "requests" in frame else 0
     avg_success = frame["success_rate"].mean() if "success_rate" in frame else None
@@ -147,6 +149,7 @@ def generate_report(
     _append_cache_comparison(lines, cache_frame)
     _append_prefix_overlap_sweep(lines, prefix_sweep_frame)
     _append_prefill_decode(lines, prefill_decode_frame)
+    _append_long_context(lines, long_context_frame)
 
     lines.extend(["", "## Cache Interpretation", ""])
     if "cache_interpretation" in frame.columns:
@@ -220,6 +223,16 @@ def _read_prefill_decode(prefill_decode_input_path: str | Path | None) -> pd.Dat
     if prefill_decode_frame.empty:
         return pd.DataFrame()
     return prefill_decode_frame
+
+
+def _read_long_context(long_context_input_path: str | Path | None) -> pd.DataFrame | None:
+    if long_context_input_path is None:
+        return None
+    long_context_path = Path(long_context_input_path)
+    long_context_frame = pd.read_csv(long_context_path)
+    if long_context_frame.empty:
+        return pd.DataFrame()
+    return long_context_frame
 
 
 def _append_cache_comparison(lines: list[str], cache_frame: pd.DataFrame | None) -> None:
@@ -306,6 +319,57 @@ def _append_prefill_decode(lines: list[str], prefill_decode_frame: pd.DataFrame 
         )
 
 
+def _append_long_context(lines: list[str], long_context_frame: pd.DataFrame | None) -> None:
+    lines.extend(["", "## Long Context Pressure", ""])
+    if long_context_frame is None:
+        lines.append("No long-context CSV was provided.")
+        return
+    if long_context_frame.empty:
+        lines.append("No long-context rows were available.")
+        return
+
+    classifications = sorted(
+        {
+            str(value)
+            for value in long_context_frame.get(
+                "pressure_classification", pd.Series(dtype=str)
+            ).dropna()
+            if str(value).strip()
+        }
+    )
+    if classifications:
+        lines.append(
+            "Observed pressure classifications: "
+            + ", ".join(f"`{classification}`" for classification in classifications)
+            + "."
+        )
+    else:
+        lines.append("No pressure classifications were available.")
+    lines.extend(
+        [
+            "Mock long-context timings validate benchmark wiring only; use real endpoint runs for engine claims.",
+            "",
+            "| engine | strategy | context bucket | pressure level | expected | "
+            "p50 TTFT ms | p50 E2E ms | input tok/sec | output tok/sec | "
+            "success rate | classification |",
+            "|---|---|---:|---|---|---:|---:|---:|---:|---:|---|",
+        ]
+    )
+    for _, row in long_context_frame.iterrows():
+        lines.append(
+            f"| {row.get('engine', 'unknown')} | {row.get('strategy', 'unknown')} | "
+            f"{_fmt(row.get('context_token_bucket'))} | "
+            f"{row.get('pressure_level', 'unknown')} | "
+            f"{row.get('expected_pressure', 'unknown')} | "
+            f"{_fmt(row.get('ttft_ms_p50'))} | "
+            f"{_fmt(row.get('e2e_latency_ms_p50'))} | "
+            f"{_fmt(row.get('input_tokens_per_second_mean'))} | "
+            f"{_fmt(row.get('output_tokens_per_second_mean'))} | "
+            f"{_fmt(row.get('success_rate'))} | "
+            f"{row.get('pressure_classification', 'unknown')} |"
+        )
+
+
 def _append_prefix_overlap_sweep(lines: list[str], prefix_sweep_frame: pd.DataFrame | None) -> None:
     lines.extend(["", "## Prefix Overlap Sweep", ""])
     if prefix_sweep_frame is None:
@@ -359,6 +423,7 @@ def main() -> None:
     parser.add_argument("--cache-input", type=Path, default=None)
     parser.add_argument("--prefix-sweep-input", type=Path, default=None)
     parser.add_argument("--prefill-decode-input", type=Path, default=None)
+    parser.add_argument("--long-context-input", type=Path, default=None)
     args = parser.parse_args()
     generate_report(
         input_path=args.input,
@@ -366,6 +431,7 @@ def main() -> None:
         cache_input_path=args.cache_input,
         prefix_sweep_input_path=args.prefix_sweep_input,
         prefill_decode_input_path=args.prefill_decode_input,
+        long_context_input_path=args.long_context_input,
     )
     print(f"Wrote report to {args.output}")
 

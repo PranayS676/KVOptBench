@@ -97,6 +97,38 @@ def test_prefill_decode_grid_covers_input_output_buckets() -> None:
     assert all(item.category == "prefill_decode" for item in items)
 
 
+def test_long_context_pressure_workload_covers_default_context_buckets() -> None:
+    items = generate_items(
+        profile="long_context_pressure",
+        count=5,
+        target_input_tokens=131072,
+        target_output_tokens=64,
+    )
+
+    buckets = [item.metadata["context_token_bucket"] for item in items]
+    pressure_levels = [item.metadata["pressure_level"] for item in items]
+
+    assert buckets == [4096, 16384, 32768, 65536, 131072]
+    assert pressure_levels == ["baseline", "moderate", "high", "extreme", "frontier"]
+    assert [item.target_input_tokens for item in items] == buckets
+    assert all(item.workload == "long_context_pressure" for item in items)
+    assert all(item.category == "long_context" for item in items)
+    assert all(item.metadata["expected_pressure"] for item in items)
+
+
+def test_long_context_pressure_workload_accepts_custom_context_buckets() -> None:
+    items = generate_items(
+        profile="long_context_pressure",
+        count=3,
+        target_input_tokens=2048,
+        target_output_tokens=32,
+        context_buckets=(128, 512, 2048),
+    )
+
+    assert [item.metadata["context_token_bucket"] for item in items] == [128, 512, 2048]
+    assert [item.target_input_tokens for item in items] == [128, 512, 2048]
+
+
 def test_needle_workload_contains_expected_answer() -> None:
     items = generate_items(
         profile="long_context_needle",

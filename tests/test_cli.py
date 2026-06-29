@@ -180,6 +180,63 @@ def test_prefill_decode_compare_cli_writes_summary(tmp_path) -> None:
     assert output.exists()
 
 
+def test_long_context_plan_cli_writes_yaml_configs(tmp_path) -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        [
+            "long-context-plan",
+            "--plan-dir",
+            str(tmp_path / "plan"),
+            "--experiment-prefix",
+            "long_context",
+            "--provider",
+            "mock",
+            "--engine",
+            "vllm",
+            "--model-id",
+            "mock-frontier-model",
+            "--base-url",
+            "http://127.0.0.1:8000/v1",
+            "--workload-file",
+            "workloads/generated/long_context_pressure.jsonl",
+            "--output-dir",
+            "results/raw",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Wrote 1 long-context experiment configs" in result.stdout
+    assert len(list((tmp_path / "plan").glob("*.yaml"))) == 1
+
+
+def test_long_context_compare_cli_writes_summary(tmp_path) -> None:
+    runner = CliRunner()
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    output = tmp_path / "long_context.csv"
+    (raw_dir / "results.jsonl").write_text(
+        json.dumps(_long_context_row()) + "\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "long-context-compare",
+            "--input",
+            str(raw_dir),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Wrote long-context comparison" in result.stdout
+    assert output.exists()
+
+
 def _cache_row(
     workload: str,
     cache_state: str,
@@ -249,5 +306,27 @@ def _prefill_decode_row() -> dict:
         "input_token_bucket": 32768,
         "output_token_bucket": 32,
         "expected_bottleneck": "prefill_bound",
+    }
+    return row
+
+
+def _long_context_row() -> dict:
+    row = _cache_row(
+        "long_context_pressure",
+        "na",
+        220.0,
+        0,
+        "long_context_pressure",
+    )
+    row["input_tokens_per_second"] = 12000.0
+    row["output_tokens_per_second"] = 80.0
+    row["metadata"]["config_metadata"] = {
+        "long_context_experiment": True,
+        "workload_profile": "long_context_pressure",
+    }
+    row["metadata"]["workload_metadata"] = {
+        "context_token_bucket": 32768,
+        "pressure_level": "high",
+        "expected_pressure": "prefill_latency_growth",
     }
     return row
