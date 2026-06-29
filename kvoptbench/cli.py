@@ -9,7 +9,7 @@ from rich import print
 
 from kvoptbench.config import ConfigError, validate_config
 
-app = typer.Typer(help="KVOptBench local/mock benchmark harness.")
+app = typer.Typer(help="KVOptBench cache-aware LLM inference benchmark.")
 
 
 @app.command("validate-config")

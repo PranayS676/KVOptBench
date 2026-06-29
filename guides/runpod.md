@@ -39,7 +39,8 @@ Inside the Pod:
 vllm serve your/model --host 0.0.0.0 --port 8000
 ```
 
-From the KVOptBench machine, set the config:
+From the KVOptBench machine, start from `examples/runpod_vllm_openai_compatible_config.yaml`
+or set the equivalent fields in another config:
 
 ```yaml
 provider: runpod
@@ -55,9 +56,9 @@ api_key_env: null
 Then run:
 
 ```bash
-kvoptbench validate-config --config examples/vllm_openai_compatible_config.yaml
-kvoptbench endpoint-check --config examples/vllm_openai_compatible_config.yaml
-kvoptbench run --config examples/vllm_openai_compatible_config.yaml
+kvoptbench validate-config --config examples/runpod_vllm_openai_compatible_config.yaml
+kvoptbench endpoint-check --config examples/runpod_vllm_openai_compatible_config.yaml
+kvoptbench run --config examples/runpod_vllm_openai_compatible_config.yaml
 ```
 
 For strategy runs, use the command previews in `guides/real_endpoint_vllm_sglang.md` and replace placeholders with flags validated against the installed vLLM version.
@@ -70,7 +71,8 @@ Inside the Pod:
 python -m sglang.launch_server --model-path your/model --host 0.0.0.0 --port 30000
 ```
 
-From the KVOptBench machine, set the config:
+From the KVOptBench machine, start from `examples/runpod_sglang_openai_compatible_config.yaml`
+or set the equivalent fields in another config:
 
 ```yaml
 provider: runpod
@@ -86,9 +88,9 @@ api_key_env: null
 Then run:
 
 ```bash
-kvoptbench validate-config --config examples/sglang_openai_compatible_config.yaml
-kvoptbench endpoint-check --config examples/sglang_openai_compatible_config.yaml
-kvoptbench run --config examples/sglang_openai_compatible_config.yaml
+kvoptbench validate-config --config examples/runpod_sglang_openai_compatible_config.yaml
+kvoptbench endpoint-check --config examples/runpod_sglang_openai_compatible_config.yaml
+kvoptbench run --config examples/runpod_sglang_openai_compatible_config.yaml
 ```
 
 For a cache-disabled SGLang control, validate `--disable-radix-cache` against the installed SGLang version before official publication.

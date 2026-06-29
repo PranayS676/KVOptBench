@@ -53,10 +53,30 @@ def test_runner_writes_failed_row_when_healthcheck_fails(tmp_path: Path) -> None
 def test_public_real_endpoint_example_configs_validate() -> None:
     from kvoptbench.config import load_config
 
-    vllm = load_config("examples/vllm_openai_compatible_config.yaml")
-    sglang = load_config("examples/sglang_openai_compatible_config.yaml")
+    configs = [
+        ("examples/vllm_openai_compatible_config.yaml", "local", "vllm", "vllm"),
+        ("examples/sglang_openai_compatible_config.yaml", "local", "sglang", "sglang"),
+        ("examples/runpod_vllm_openai_compatible_config.yaml", "runpod", "vllm", "vllm"),
+        ("examples/runpod_sglang_openai_compatible_config.yaml", "runpod", "sglang", "sglang"),
+        (
+            "examples/lambda_cloud_vllm_openai_compatible_config.yaml",
+            "lambda_cloud",
+            "vllm",
+            "vllm",
+        ),
+        (
+            "examples/generic_openai_compatible_config.yaml",
+            "other",
+            "openai_compatible",
+            "openai_compatible",
+        ),
+    ]
 
-    assert vllm.endpoint_type == "vllm"
-    assert sglang.endpoint_type == "sglang"
-    assert vllm.retries >= 1
-    assert sglang.retries >= 1
+    for path, provider, engine, endpoint_type in configs:
+        config = load_config(path)
+        assert config.provider == provider
+        assert config.engine == engine
+        assert config.endpoint_type == endpoint_type
+        assert config.retries >= 1
+        assert config.base_url.endswith("/v1")
+        assert config.output_file.as_posix().startswith("results/raw/")

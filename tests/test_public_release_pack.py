@@ -101,6 +101,9 @@ def test_public_release_guides_document_real_endpoint_and_runpod_workflows() -> 
 
     assert "examples/vllm_openai_compatible_config.yaml" in real_text
     assert "examples/sglang_openai_compatible_config.yaml" in real_text
+    assert "examples/runpod_vllm_openai_compatible_config.yaml" in real_text
+    assert "examples/lambda_cloud_vllm_openai_compatible_config.yaml" in real_text
+    assert "examples/generic_openai_compatible_config.yaml" in real_text
     assert "kvoptbench endpoint-check" in real_text
     assert "kvoptbench engine-command" in real_text
     assert "--enable-prefix-caching" in real_text
@@ -110,6 +113,8 @@ def test_public_release_guides_document_real_endpoint_and_runpod_workflows() -> 
     assert "https://docs.sglang.io" in real_text
 
     assert "https://docs.runpod.io" in runpod_text
+    assert "examples/runpod_vllm_openai_compatible_config.yaml" in runpod_text
+    assert "examples/runpod_sglang_openai_compatible_config.yaml" in runpod_text
     assert "proxy.runpod.net" in runpod_text
     assert "/workspace" in runpod_text
     assert "/runpod-volume" in runpod_text
@@ -119,6 +124,8 @@ def test_public_release_guides_document_real_endpoint_and_runpod_workflows() -> 
 
     assert "guides/real_endpoint_vllm_sglang.md" in readme_text
     assert "guides/runpod.md" in readme_text
+    assert "guides/first_real_benchmark.md" in readme_text
+    assert "Lambda Cloud" in readme_text
 
     public_text = "\n".join([real_text, runpod_text])
     assert "Milestone" not in public_text
@@ -162,3 +169,23 @@ def test_public_release_templates_have_required_publication_sections() -> None:
     assert "Milestone" not in combined
     assert "C:\\Users" not in combined
     assert "OneDrive" not in combined
+
+
+def test_public_readiness_files_do_not_expose_internal_placeholders() -> None:
+    checked_files = [
+        Path("README.md"),
+        Path("ROADMAP.md"),
+        Path("AGENTS.md"),
+        Path("CITATION.cff"),
+        Path("guides/reproducibility.md"),
+        Path("guides/real_endpoint_vllm_sglang.md"),
+        Path("guides/runpod.md"),
+        Path("guides/first_real_benchmark.md"),
+    ]
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in checked_files)
+
+    assert "Milestone" not in combined
+    assert "YOUR_USERNAME" not in combined
+    assert "C:\\Users" not in combined
+    assert "OneDrive" not in combined
+    assert "https://github.com/PranayS676/KVOptBench" in combined

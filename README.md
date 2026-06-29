@@ -1,55 +1,65 @@
 # KVOptBench
 
-KVOptBench is a cache-aware frontier LLM inference benchmark and strategy optimizer.
+KVOptBench is a cache-aware LLM inference benchmark and strategy advisor.
 
-It does **not** replace inference engines such as vLLM, SGLang, LMCache, Mooncake, or llm-d. Instead, it sits above them as an experiment and decision layer.
+It does not replace serving engines such as vLLM, SGLang, LMCache, Mooncake, or
+llm-d. KVOptBench sits above those systems, sends controlled workloads to an
+OpenAI-compatible endpoint, records request-level metrics, and turns comparison
+results into practical strategy recommendations.
 
-KVOptBench helps users measure and understand:
+Use it to answer questions such as:
 
-- KV cache behavior
-- prefix caching
-- radix caching
-- cache hit rate
-- cache miss penalty
-- prefill vs decode bottlenecks
-- long-context pressure
-- KV cache quantization
-- KV offload / hierarchical cache
-- speculative decoding
-- prefill/decode disaggregation
-- quality vs latency tradeoffs
-- automatic inference strategy selection
-
-## Why KVOptBench exists
-
-Most inference benchmarks report basic metrics such as requests/sec, tokens/sec, TTFT, and p95 latency. Those metrics are useful, but they do not explain **why** a model or engine behaves the way it does.
-
-KVOptBench is designed to answer deeper questions:
-
-- When does prefix caching actually help?
+- When does prefix or radix caching actually reduce TTFT?
 - How expensive is a cache miss?
-- Is this workload prefill-bound or decode-bound?
+- Is a workload prefill-bound, decode-bound, or mixed?
+- Does long context create memory pressure or quality risk?
 - Does KV quantization improve capacity without hurting quality?
-- Does KV offload help or just move the bottleneck to CPU/PCIe?
-- Does speculative decoding improve long-output workloads?
-- Does prefill/decode disaggregation improve mixed traffic?
-- Which inference strategy should I choose for my workload?
+- Does KV offload help or move the bottleneck to host memory and transfer?
+- Does speculative decoding help decode-heavy work?
+- Is prefill/decode disaggregation worth testing for mixed traffic?
+
+## What KVOptBench Does
+
+- Generates controlled benchmark workloads.
+- Runs against mock, vLLM, SGLang, or generic OpenAI-compatible endpoints.
+- Measures TTFT, TPOT, ITL, end-to-end latency, throughput, success rate, and quality fields.
+- Preserves unavailable backend metrics as `null` and records them in `missing_metrics`.
+- Produces JSONL request results, summary CSVs, comparison CSVs, Markdown reports, and strategy-advisor outputs.
+
+## What KVOptBench Does Not Do
+
+- It does not serve models.
+- It does not provision GPUs.
+- It does not download frontier model weights in tests.
+- It does not manage Kubernetes or production orchestration.
+- It does not fabricate engine internals when a backend does not expose them.
+
+Users bring any reachable endpoint: local GPU, RunPod, Lambda Cloud, another cloud GPU provider,
+bare metal, or an internal OpenAI-compatible serving stack.
 
 ## Status
 
-Early project. The local/mock benchmark harness, real OpenAI-compatible endpoint runner, engine profiles, cache experiment planning, cache comparison reporting, prefix-overlap sweep analysis, prefill/decode decomposition, long-context pressure analysis, KV cache quantization comparison, KV offload experiment support, speculative decoding sweep support, prefill/decode disaggregation experiment support, and evidence-based strategy advisor are in place.
+The project currently includes:
 
-## Local Mock Quickstart
+- local mock OpenAI-compatible server
+- YAML-driven experiment runner
+- streaming and non-streaming timing capture
+- workload generators for cache, long-context, decode-heavy, RAG, tool-calling, and agentic patterns
+- vLLM and SGLang command previews
+- real endpoint health checks and runner support
+- cache, prefix-overlap, prefill/decode, long-context, KV quantization, KV offload, speculative decoding, and disaggregation comparisons
+- public example bundle and report templates
+- evidence-based strategy advisor
 
-The local mock path runs entirely on a developer machine. It does not require RunPod, a GPU, model weights, or any external API.
+Real endpoint result collection is the next major validation step.
 
-### Install
+## Install
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
-pytest
+python -m pip install -e ".[dev]"
+python -m pytest
 ```
 
 On Windows PowerShell:
@@ -61,34 +71,94 @@ python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
-### Run the mock harness
+## Local Mock Quickstart
 
-In one terminal, start the mock OpenAI-compatible server:
+The mock path validates the benchmark harness without a GPU, RunPod, model weights, or external API keys.
+
+Start the mock server:
 
 ```bash
 python -m kvoptbench.mock_server --port 8000
 ```
 
-In another terminal, generate a workload and run the example experiment:
+In another terminal:
 
 ```bash
-python -m kvoptbench.workloads.generate --profile shared_prefix --out workloads/generated/shared_prefix_32k.jsonl
-python -m kvoptbench.runner --config examples/example_experiment_config.yaml
-python -m kvoptbench.analysis.summarize --input results/raw --output results/summary.csv
-python -m kvoptbench.reports.generate --input results/summary.csv --output reports/mock_report.md
+kvoptbench generate-workload --profile shared_prefix --out workloads/generated/shared_prefix_32k.jsonl
+kvoptbench run --config examples/example_experiment_config.yaml
+kvoptbench summarize --input results/raw --output results/summary.csv
+kvoptbench report --input results/summary.csv --output reports/mock_report.md
 ```
-
-The local run writes:
-
-- request-level JSONL results under `results/raw/`
-- a summary CSV at `results/summary.csv`
-- a markdown report at `reports/mock_report.md`
 
 Generated workloads, raw results, summaries, and reports are ignored by git by default.
 
+## Bring Your Own Endpoint
+
+KVOptBench expects a running OpenAI-compatible HTTP endpoint. The endpoint can be local or remote.
+
+Example configs:
+
+| Environment | Config |
+|---|---|
+| local vLLM | `examples/vllm_openai_compatible_config.yaml` |
+| local SGLang | `examples/sglang_openai_compatible_config.yaml` |
+| RunPod vLLM | `examples/runpod_vllm_openai_compatible_config.yaml` |
+| RunPod SGLang | `examples/runpod_sglang_openai_compatible_config.yaml` |
+| Lambda Cloud vLLM | `examples/lambda_cloud_vllm_openai_compatible_config.yaml` |
+| generic OpenAI-compatible endpoint | `examples/generic_openai_compatible_config.yaml` |
+
+Edit the config fields that match your server:
+
+- `provider`
+- `engine`
+- `endpoint_type`
+- `base_url`
+- `model_id`
+- `api_key_env`, only when authentication is required
+- `workload_file`
+- `output_file`
+
+Then run:
+
+```bash
+kvoptbench validate-config --config examples/vllm_openai_compatible_config.yaml
+kvoptbench endpoint-check --config examples/vllm_openai_compatible_config.yaml
+kvoptbench run --config examples/vllm_openai_compatible_config.yaml
+kvoptbench summarize --input results/raw --output results/summary.csv
+kvoptbench report --input results/summary.csv --output reports/real_endpoint_report.md
+```
+
+## Strategy Experiments
+
+The CLI can generate config plans and comparison CSVs for common inference-strategy tests:
+
+- `cache-plan`, `cache-run`, `cache-compare`
+- `prefix-sweep-compare`
+- `prefill-decode-plan`, `prefill-decode-run`, `prefill-decode-compare`
+- `long-context-plan`, `long-context-run`, `long-context-compare`
+- `kv-quant-plan`, `kv-quant-run`, `kv-quant-compare`
+- `kv-offload-plan`, `kv-offload-run`, `kv-offload-compare`
+- `spec-decoding-plan`, `spec-decoding-run`, `spec-decoding-compare`
+- `disagg-plan`, `disagg-run`, `disagg-compare`
+- `strategy-recommend`
+
+Command previews document how a compatible server may be started. They do not launch servers:
+
+```bash
+kvoptbench engine-command --engine vllm --strategy cache_on --model-id your/model
+kvoptbench engine-command --engine sglang --strategy cache_off --model-id your/model
+```
+
+For official real endpoint results, record the exact backend command, engine version, model revision,
+GPU type, workload hash, config hash, and `missing_metrics`.
+
 ## Public Example Bundle
 
-A deterministic public example bundle is included under `examples/public_release/`. It contains small CSV fixtures, a checked-in mock benchmark report, and checked-in strategy advisor JSON/Markdown outputs. Use it to inspect the report shape without starting a server.
+`examples/public_release/` contains deterministic fixture CSVs, a mock report, and strategy-advisor
+outputs. These examples prove the reporting pipeline works. They are not real vLLM, SGLang, LMCache,
+Mooncake, or llm-d performance claims.
+
+Regenerate the advisor and combined report with:
 
 ```bash
 kvoptbench strategy-recommend \
@@ -118,300 +188,19 @@ kvoptbench report \
   --output reports/outputs/mock_benchmark_report.md
 ```
 
-See `guides/reproducibility.md` for the full fresh-clone workflow and interpretation rules.
+## Guides
 
-Additional public release guides:
-
+- `guides/reproducibility.md`
 - `guides/real_endpoint_vllm_sglang.md`
 - `guides/runpod.md`
+- `guides/first_real_benchmark.md`
 - `examples/public_release/result_template.md`
 - `examples/public_release/blog_report_template.md`
 
-### CLI shortcuts
+## Contributing
 
-The installed console command exposes the same workflow:
-
-```bash
-kvoptbench validate-config --config examples/example_experiment_config.yaml
-kvoptbench generate-workload --profile shared_prefix --out workloads/generated/shared_prefix_32k.jsonl
-kvoptbench run --config examples/example_experiment_config.yaml
-kvoptbench summarize --input results/raw --output results/summary.csv
-kvoptbench report --input results/summary.csv --output reports/mock_report.md
-kvoptbench strategy-recommend --summary results/summary.csv --markdown-output reports/strategy_advisor.md
-```
-
-## Real Endpoint Mode
-
-Real endpoint mode can run against an existing OpenAI-compatible endpoint, including vLLM and SGLang servers that are already running. KVOptBench does not start, deploy, or manage those servers.
-
-Public-safe example configs are included:
-
-- `examples/vllm_openai_compatible_config.yaml`
-- `examples/sglang_openai_compatible_config.yaml`
-
-Before running, edit the example config for your local endpoint:
-
-- `base_url`
-- `model_id`
-- `api_key_env`, only if the endpoint requires auth
-- `workload_file`
-- `output_file`
-
-Then validate and check the endpoint:
-
-```bash
-kvoptbench validate-config --config examples/vllm_openai_compatible_config.yaml
-kvoptbench endpoint-check --config examples/vllm_openai_compatible_config.yaml
-```
-
-Run the benchmark with the same runner:
-
-```bash
-kvoptbench run --config examples/vllm_openai_compatible_config.yaml
-kvoptbench summarize --input results/raw --output results/summary.csv
-kvoptbench report --input results/summary.csv --output reports/real_endpoint_report.md
-```
-
-Real endpoint mode records unavailable engine/GPU metrics as `null` and lists them in `missing_metrics`. Do not treat missing telemetry as zero.
-
-## Engine Profiles And Cache Planning
-
-KVOptBench includes command previews for vLLM and SGLang strategies so users can document how a server should be started without letting the benchmark harness manage the server process.
-
-```bash
-kvoptbench engine-command --engine vllm --strategy cache_on --model-id your/model
-kvoptbench engine-command --engine sglang --strategy cache_on --model-id your/model
-```
-
-Cache experiment helpers build a cold/warm ablation matrix with shared-prefix workloads and random-prefix controls. The benchmark still runs through normal YAML configs and records unavailable engine telemetry as missing rather than inventing metrics.
-
-```bash
-kvoptbench generate-workload --profile shared_prefix --out workloads/generated/shared_prefix_32k.jsonl
-kvoptbench generate-workload --profile random_prefix --out workloads/generated/random_prefix_32k.jsonl
-
-kvoptbench cache-plan \
-  --plan-dir configs/cache_plan \
-  --experiment-prefix cache_exp \
-  --provider mock \
-  --engine vllm \
-  --model-id mock-frontier-model \
-  --base-url http://127.0.0.1:8000/v1 \
-  --shared-workload-file workloads/generated/shared_prefix_32k.jsonl \
-  --random-workload-file workloads/generated/random_prefix_32k.jsonl \
-  --output-dir results/raw
-
-kvoptbench cache-run --plan-dir configs/cache_plan
-kvoptbench summarize --input results/raw --output results/summary.csv
-kvoptbench cache-compare --input results/raw --output results/cache_summary.csv
-kvoptbench report --input results/summary.csv --cache-input results/cache_summary.csv --output reports/cache_report.md
-```
-
-To test where prefix caching starts to pay off, generate a partial-prefix workload and add the prefix sweep comparison output to the report:
-
-```bash
-kvoptbench generate-workload --profile partial_prefix --count 6 --out workloads/generated/partial_prefix_sweep.jsonl
-
-kvoptbench cache-plan \
-  --plan-dir configs/prefix_sweep_plan \
-  --experiment-prefix prefix_sweep \
-  --provider mock \
-  --engine vllm \
-  --model-id mock-frontier-model \
-  --base-url http://127.0.0.1:8000/v1 \
-  --shared-workload-file workloads/generated/partial_prefix_sweep.jsonl \
-  --random-workload-file workloads/generated/random_prefix_32k.jsonl \
-  --output-dir results/raw
-
-kvoptbench cache-run --plan-dir configs/prefix_sweep_plan
-kvoptbench summarize --input results/raw --output results/summary.csv
-kvoptbench prefix-sweep-compare --input results/raw --output results/prefix_sweep.csv
-kvoptbench report --input results/summary.csv --prefix-sweep-input results/prefix_sweep.csv --output reports/prefix_sweep_report.md
-```
-
-## Prefill Vs Decode Decomposition
-
-Prefill/decode helpers run a controlled input/output grid and infer bottleneck pressure from request-level timing metrics. TTFT is treated as a prefill-pressure signal, while TPOT, ITL, and output-token throughput are treated as decode-pressure signals. Missing metrics remain unavailable rather than being invented.
-
-```bash
-kvoptbench generate-workload --profile prefill_decode_grid --count 12 --out workloads/generated/prefill_decode_grid.jsonl
-
-kvoptbench prefill-decode-plan \
-  --plan-dir configs/prefill_decode_plan \
-  --experiment-prefix prefill_decode \
-  --provider mock \
-  --engine vllm \
-  --model-id mock-frontier-model \
-  --base-url http://127.0.0.1:8000/v1 \
-  --workload-file workloads/generated/prefill_decode_grid.jsonl \
-  --output-dir results/raw
-
-kvoptbench prefill-decode-run --plan-dir configs/prefill_decode_plan
-kvoptbench summarize --input results/raw --output results/summary.csv
-kvoptbench prefill-decode-compare --input results/raw --output results/prefill_decode.csv
-kvoptbench report --input results/summary.csv --prefill-decode-input results/prefill_decode.csv --output reports/prefill_decode_report.md
-```
-
-## Long-Context Pressure
-
-Long-context helpers run the same prompt shape across increasing context buckets and classify whether the observed request-level behavior is stable, prefill-latency dominated, throughput degraded, failed under pressure, or missing enough signal to classify. The default buckets are `4096`, `16384`, `32768`, `65536`, and `131072` tokens. Larger buckets such as `262144`, `524288`, or `1000000` can be supplied for endpoints that support frontier-scale context windows.
-
-```bash
-kvoptbench generate-workload --profile long_context_pressure --count 5 --out workloads/generated/long_context_pressure.jsonl
-
-kvoptbench long-context-plan \
-  --plan-dir configs/long_context_plan \
-  --experiment-prefix long_context \
-  --provider mock \
-  --engine vllm \
-  --model-id mock-frontier-model \
-  --base-url http://127.0.0.1:8000/v1 \
-  --workload-file workloads/generated/long_context_pressure.jsonl \
-  --output-dir results/raw
-
-kvoptbench long-context-run --plan-dir configs/long_context_plan
-kvoptbench summarize --input results/raw --output results/summary.csv
-kvoptbench long-context-compare --input results/raw --output results/long_context.csv
-kvoptbench report --input results/summary.csv --long-context-input results/long_context.csv --output reports/long_context_report.md
-```
-
-For a larger real endpoint sweep, provide explicit buckets:
-
-```bash
-kvoptbench generate-workload \
-  --profile long_context_pressure \
-  --count 6 \
-  --context-buckets 4096,32768,131072,262144,524288,1000000 \
-  --out workloads/generated/long_context_frontier.jsonl
-```
-
-Mock timings validate harness wiring only. Use real vLLM and SGLang endpoint runs before making engine-level claims, and treat unavailable engine/GPU metrics as missing rather than zero.
-
-## KV Cache Quantization
-
-KV quantization helpers compare a baseline run against a quantized KV cache strategy, currently `kv_fp8`, using the same workload and endpoint shape. The default path uses `long_context_pressure` because KV cache precision tradeoffs matter most when context length creates memory pressure. KVOptBench reports latency, throughput, success rate, quality, and memory deltas when real memory telemetry is available.
-
-```bash
-kvoptbench generate-workload --profile long_context_pressure --count 5 --out workloads/generated/long_context_pressure.jsonl
-
-kvoptbench kv-quant-plan \
-  --plan-dir configs/kv_quant_plan \
-  --experiment-prefix kv_quant \
-  --provider mock \
-  --engine vllm \
-  --model-id mock-frontier-model \
-  --base-url http://127.0.0.1:8000/v1 \
-  --workload-file workloads/generated/long_context_pressure.jsonl \
-  --output-dir results/raw
-
-kvoptbench kv-quant-run --plan-dir configs/kv_quant_plan
-kvoptbench summarize --input results/raw --output results/summary.csv
-kvoptbench kv-quant-compare --input results/raw --output results/kv_quantization.csv
-kvoptbench report --input results/summary.csv --kv-quant-input results/kv_quantization.csv --output reports/kv_quantization_report.md
-```
-
-Mock runs validate the comparison shape only. For real vLLM and SGLang runs, verify the engine flags, model support, and any reported GPU/KV memory telemetry before interpreting capacity benefits. Missing memory telemetry remains unavailable rather than being treated as zero.
-
-## KV Offload
-
-KV offload helpers compare a baseline run against a `kv_offload` strategy using the same long-context workload shape. This is benchmark-layer support only: KVOptBench writes configs, runs the endpoint, compares latency/throughput/quality/memory deltas, and preserves missing telemetry. It does not implement offload or manage backend server lifecycle.
-
-The built-in vLLM and SGLang `kv_offload` engine profiles are placeholders. Replace `<kv-offload-flags>` with flags supported by the installed backend version before official real-endpoint runs.
-
-```bash
-kvoptbench generate-workload --profile long_context_pressure --count 5 --out workloads/generated/long_context_pressure.jsonl
-
-kvoptbench kv-offload-plan \
-  --plan-dir configs/kv_offload_plan \
-  --experiment-prefix kv_offload \
-  --provider mock \
-  --engine vllm \
-  --model-id mock-frontier-model \
-  --base-url http://127.0.0.1:8000/v1 \
-  --workload-file workloads/generated/long_context_pressure.jsonl \
-  --output-dir results/raw
-
-kvoptbench kv-offload-run --plan-dir configs/kv_offload_plan
-kvoptbench summarize --input results/raw --output results/summary.csv
-kvoptbench kv-offload-compare --input results/raw --output results/kv_offload.csv
-kvoptbench report --input results/summary.csv --kv-offload-input results/kv_offload.csv --output reports/kv_offload_report.md
-```
-
-Mock runs validate the comparison shape only. For real vLLM and SGLang runs, verify offload flags, model support, host/device memory telemetry, and transfer bottleneck visibility before making capacity or latency claims. Missing memory telemetry remains unavailable rather than being treated as zero.
-
-## Speculative Decoding
-
-Speculative decoding helpers compare a baseline run against `speculative_decoding` on decode-heavy workloads. KVOptBench measures latency, output throughput, success rate, quality, and missing backend-specific telemetry without claiming draft-model acceptance metrics unless the endpoint exposes them.
-
-The built-in vLLM and SGLang speculative decoding profiles are placeholders. Replace `<draft-model>` and any algorithm flags with a supported backend setup before official real-endpoint runs.
-
-```bash
-kvoptbench generate-workload --profile decode_heavy --count 5 --out workloads/generated/decode_heavy.jsonl
-
-kvoptbench spec-decoding-plan \
-  --plan-dir configs/spec_decoding_plan \
-  --experiment-prefix spec_decode \
-  --provider mock \
-  --engine vllm \
-  --model-id mock-frontier-model \
-  --base-url http://127.0.0.1:8000/v1 \
-  --workload-file workloads/generated/decode_heavy.jsonl \
-  --output-dir results/raw
-
-kvoptbench spec-decoding-run --plan-dir configs/spec_decoding_plan
-kvoptbench summarize --input results/raw --output results/summary.csv
-kvoptbench spec-decoding-compare --input results/raw --output results/speculative_decoding.csv
-kvoptbench report --input results/summary.csv --spec-decoding-input results/speculative_decoding.csv --output reports/speculative_decoding_report.md
-```
-
-Mock runs validate the comparison shape only. For real vLLM and SGLang runs, verify draft-model compatibility, speculative algorithm flags, and any exposed acceptance-rate telemetry before interpreting performance gains.
-
-## Prefill/Decode Disaggregation
-
-Prefill/decode disaggregation helpers compare a baseline run against `prefill_decode_disaggregation` on the prefill/decode grid workload. KVOptBench measures TTFT, TPOT, ITL, E2E latency, output throughput, quality, success rate, and missing telemetry by input/output bucket. It does not launch, coordinate, or implement disaggregated serving.
-
-The built-in vLLM and SGLang disaggregation profiles are placeholders. Replace `<prefill-decode-disaggregation-flags>` with the backend-specific multi-process or disaggregated serving setup before official real-endpoint runs.
-
-```bash
-kvoptbench generate-workload --profile prefill_decode_grid --count 12 --out workloads/generated/prefill_decode_grid.jsonl
-
-kvoptbench disagg-plan \
-  --plan-dir configs/disagg_plan \
-  --experiment-prefix disagg \
-  --provider mock \
-  --engine vllm \
-  --model-id mock-frontier-model \
-  --base-url http://127.0.0.1:8000/v1 \
-  --workload-file workloads/generated/prefill_decode_grid.jsonl \
-  --output-dir results/raw
-
-kvoptbench disagg-run --plan-dir configs/disagg_plan
-kvoptbench summarize --input results/raw --output results/summary.csv
-kvoptbench disagg-compare --input results/raw --output results/disaggregation.csv
-kvoptbench report --input results/summary.csv --disagg-input results/disaggregation.csv --output reports/disaggregation_report.md
-```
-
-Mock runs validate the comparison shape only. For real vLLM and SGLang runs, verify the disaggregated deployment topology, routing behavior, model revision, and available backend telemetry before making architecture claims.
-
-## Strategy Advisor
-
-The strategy advisor turns summary and comparison CSVs into ranked recommendations. It is intentionally transparent: every recommendation includes observed evidence, caveats, missing telemetry warnings, and the next experiment to run. It does not manage serving engines or claim backend metrics that were not recorded.
-
-```bash
-kvoptbench strategy-recommend \
-  --summary results/summary.csv \
-  --cache-input results/cache_summary.csv \
-  --prefix-sweep-input results/prefix_sweep.csv \
-  --kv-quant-input results/kv_quantization.csv \
-  --kv-offload-input results/kv_offload.csv \
-  --spec-decoding-input results/speculative_decoding.csv \
-  --disagg-input results/disaggregation.csv \
-  --json-output reports/strategy_advisor.json \
-  --markdown-output reports/strategy_advisor.md
-```
-
-Recommendations currently cover prefix caching, KV quantization, KV offload, speculative decoding, and prefill/decode disaggregation. If a comparison CSV or required metric is unavailable, the advisor reports `needs_more_data` or `inconclusive` with a concrete follow-up instead of fabricating a result.
-
-The main markdown report can embed the advisor output when `--strategy-input` points at the advisor JSON.
+Good contributions improve reproducibility, workload coverage, engine support, metric parsing,
+quality evaluation, reporting, or safe public examples. See `CONTRIBUTING.md` and `SECURITY.md`.
 
 ## License
 

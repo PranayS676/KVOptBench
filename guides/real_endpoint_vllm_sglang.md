@@ -15,6 +15,13 @@ Use the public-safe configs as the starting point:
 
 - `examples/vllm_openai_compatible_config.yaml`
 - `examples/sglang_openai_compatible_config.yaml`
+- `examples/runpod_vllm_openai_compatible_config.yaml`
+- `examples/runpod_sglang_openai_compatible_config.yaml`
+- `examples/lambda_cloud_vllm_openai_compatible_config.yaml`
+- `examples/generic_openai_compatible_config.yaml`
+
+The provider can be local GPU, RunPod, Lambda Cloud, bare metal, or another cloud GPU
+environment. KVOptBench only requires a reachable OpenAI-compatible HTTP endpoint.
 
 Generate command previews from the checked-in engine profiles:
 
@@ -38,6 +45,7 @@ KVOptBench expects an OpenAI-compatible HTTP endpoint:
 
 The config fields that must match the running server are:
 
+- `provider`
 - `base_url`
 - `model_id`
 - `endpoint_type`
@@ -129,6 +137,12 @@ kvoptbench report --input results/summary.csv --output reports/outputs/real_endp
 ```
 
 Repeat the same flow with `examples/sglang_openai_compatible_config.yaml` for SGLang.
+
+For remote GPUs, start from the matching provider config and replace only the endpoint,
+model, auth, workload, and output fields. For example, RunPod users can start from
+`examples/runpod_vllm_openai_compatible_config.yaml`; Lambda Cloud users can start from
+`examples/lambda_cloud_vllm_openai_compatible_config.yaml`; other OpenAI-compatible
+services can start from `examples/generic_openai_compatible_config.yaml`.
 
 ## Strategy Experiment Order
 

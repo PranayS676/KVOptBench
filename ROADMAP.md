@@ -84,6 +84,8 @@
 
 - RunPod runbook
 - vLLM/SGLang engine guides
+- First real benchmark guide
+- Provider-neutral endpoint example configs
 - Public benchmark result templates
 - Blog-ready report format
 
