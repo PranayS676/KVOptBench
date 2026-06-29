@@ -1,6 +1,6 @@
 # Roadmap
 
-## Milestone 1: Local Mock Harness
+## Done: Local Mock Harness
 
 - Mock OpenAI-compatible server
 - Workload generators
@@ -12,7 +12,7 @@
 - Basic quality evaluators
 - Tests and CI
 
-## Milestone 2: Real Endpoint Benchmarking
+## Done: Real Endpoint Benchmarking
 
 - OpenAI-compatible endpoint runner
 - vLLM endpoint support
@@ -20,7 +20,7 @@
 - Timeout and retry handling
 - Server metadata capture
 
-## Milestone 3: Cache Experiments
+## Next: Cache Experiments
 
 - Prefix cache ablation
 - Radix cache ablation
@@ -28,7 +28,7 @@
 - Cache miss penalty calculation
 - Shared-prefix ratio sweep
 
-## Milestone 4: Advanced Inference Experiments
+## Later: Advanced Inference Experiments
 
 - Prefill vs decode decomposition
 - Long-context pressure sweep
@@ -37,7 +37,7 @@
 - Speculative decoding sweep
 - Prefill/decode disaggregation placeholder/integration
 
-## Milestone 5: Strategy Optimizer
+## Later: Strategy Optimizer
 
 - Workload feature extraction
 - Strategy recommendation rules
@@ -45,7 +45,7 @@
 - Pareto analysis
 - Automatic strategy selector evaluation
 
-## Milestone 6: Public Research Release
+## Later: Public Research Release
 
 - Example reports
 - Reproducibility guide

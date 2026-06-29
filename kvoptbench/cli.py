@@ -45,6 +45,31 @@ def endpoint_check_command(
     print(f"[green]OK[/green] {health.url} ({models})")
 
 
+@app.command("engine-command")
+def engine_command_command(
+    engine: str = typer.Option(..., "--engine", "-e"),
+    strategy: str = typer.Option(..., "--strategy", "-s"),
+    model_id: str = typer.Option(..., "--model-id", "-m"),
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    """Render an engine server command preview without launching it."""
+    from kvoptbench.engines.profiles import render_command_preview
+
+    preview = render_command_preview(
+        engine=engine,
+        strategy=strategy,
+        model_id=model_id,
+        host=host,
+        port=port,
+    )
+    print(f"[bold]{preview.engine}[/bold] / {preview.strategy}")
+    print(preview.description)
+    print(f"[cyan]{preview.command}[/cyan]")
+    print(f"Endpoint: {preview.endpoint.base_url}")
+    print(f"Notes: {preview.notes}")
+
+
 @app.command("generate-workload")
 def generate_workload_command(
     profile: str = typer.Option(..., "--profile", "-p"),

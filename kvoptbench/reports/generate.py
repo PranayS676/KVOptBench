@@ -116,6 +116,25 @@ def generate_report(input_path: str | Path, output_path: str | Path) -> Path:
             f"{_fmt(row.get('quality_score_mean'))} | {_fmt(row.get('success_rate'))} |"
         )
 
+    lines.extend(
+        [
+            "",
+            "## Cache Summary",
+            "",
+            "| workload | strategy | cache hit rate | cache miss penalty ms |",
+            "|---|---|---:|---:|",
+        ]
+    )
+    if {"cache_hit_rate_mean", "cache_miss_penalty_ms_mean"}.intersection(frame.columns):
+        for _, row in frame.iterrows():
+            lines.append(
+                f"| {row.get('workload', 'unknown')} | {row.get('strategy', 'unknown')} | "
+                f"{_fmt(row.get('cache_hit_rate_mean'))} | "
+                f"{_fmt(row.get('cache_miss_penalty_ms_mean'))} |"
+            )
+    else:
+        lines.append("| n/a | n/a | n/a | n/a |")
+
     lines.extend(["", "## Missing Metrics Warning", ""])
     if missing_values:
         lines.append(
@@ -131,9 +150,9 @@ def generate_report(input_path: str | Path, output_path: str | Path) -> Path:
             "",
             "## Next Steps",
             "",
-            "- Use this report to validate the local/mock harness only.",
+            "- Use this report to validate benchmark wiring and experiment shape.",
             "- Do not treat mock metrics as real engine benchmark results.",
-            "- Add real endpoint validation in Milestone 2 after Milestone 1 tests pass.",
+            "- For real endpoint runs, verify engine flags, model revision, workload hash, and missing telemetry before publishing.",
             "",
         ]
     )

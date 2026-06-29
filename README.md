@@ -37,11 +37,11 @@ KVOptBench is designed to answer deeper questions:
 
 ## Status
 
-Early project. Milestone 1 focuses on a local/mock benchmark harness. Real vLLM/SGLang/RunPod experiments come after the local harness is stable.
+Early project. The local/mock benchmark harness and real OpenAI-compatible endpoint runner are in place. Current work is focused on engine profiles, cache experiment planning, and reproducible cache ablations.
 
-## Milestone 1 Quickstart
+## Local Mock Quickstart
 
-Milestone 1 runs entirely locally. It does not require RunPod, a GPU, model weights, or any external API.
+The local mock path runs entirely on a developer machine. It does not require RunPod, a GPU, model weights, or any external API.
 
 ### Install
 
@@ -100,7 +100,7 @@ kvoptbench report --input results/summary.csv --output reports/mock_report.md
 
 ## Real Endpoint Mode
 
-Milestone 2 can run against an existing OpenAI-compatible endpoint, including vLLM and SGLang servers that are already running. KVOptBench does not start, deploy, or manage those servers in this milestone.
+Real endpoint mode can run against an existing OpenAI-compatible endpoint, including vLLM and SGLang servers that are already running. KVOptBench does not start, deploy, or manage those servers.
 
 Public-safe example configs are included:
 
@@ -131,6 +131,17 @@ kvoptbench report --input results/summary.csv --output reports/real_endpoint_rep
 ```
 
 Real endpoint mode records unavailable engine/GPU metrics as `null` and lists them in `missing_metrics`. Do not treat missing telemetry as zero.
+
+## Engine Profiles And Cache Planning
+
+KVOptBench includes command previews for vLLM and SGLang strategies so users can document how a server should be started without letting the benchmark harness manage the server process.
+
+```bash
+kvoptbench engine-command --engine vllm --strategy cache_on --model-id your/model
+kvoptbench engine-command --engine sglang --strategy cache_on --model-id your/model
+```
+
+Cache experiment helpers build a cold/warm ablation matrix with shared-prefix workloads and random-prefix controls. The benchmark still runs through normal YAML configs and records unavailable engine telemetry as missing rather than inventing metrics.
 
 ## License
 
