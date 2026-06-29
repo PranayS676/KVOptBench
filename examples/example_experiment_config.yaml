@@ -1,0 +1,18 @@
+experiment_id: mock_shared_prefix_baseline
+official_run: false
+provider: mock
+engine: mock
+model_id: mock-frontier-model
+strategy: baseline
+base_url: http://127.0.0.1:8000/v1
+api_key_env: KVOPTBENCH_API_KEY
+workload_file: workloads/generated/shared_prefix_32k.jsonl
+output_file: results/raw/mock_shared_prefix_baseline.jsonl
+concurrency: 2
+request_rate: null
+max_tasks: 10
+max_output_tokens: 256
+timeout_seconds: 120
+stream: true
+metadata:
+  description: Local mock experiment for validating KVOptBench harness.

@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+title: KVOptBench
+message: If you use KVOptBench in your research or technical work, please cite it.
+type: software
+authors:
+  - family-names: Masadi
+    given-names: SaiPranay
+license: MIT
+repository-code: https://github.com/YOUR_USERNAME/kvoptbench
+abstract: KVOptBench is a cache-aware frontier LLM inference benchmark and strategy optimizer for studying KV cache behavior, prefix caching, prefill/decode bottlenecks, KV quantization, KV offload, speculative decoding, and quality-latency tradeoffs.
+keywords:
+  - llm-inference
+  - kv-cache
+  - prefix-caching
+  - vllm
+  - sglang
+  - speculative-decoding
+  - benchmark
+  - frontier-models

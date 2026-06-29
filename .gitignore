@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtualenvs
+.venv/
+venv/
+
+# Env/secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local implementation/handoff docs
+docs/
+CODEX_IMPLEMENTATION_BRIEF.md
+CODEX_PROMPT.md
+
+# Results and large generated files
+results/raw/*
+results/processed/*
+results/summaries/*
+reports/outputs/*
+workloads/generated/*
+*.jsonl
+*.csv
+*.parquet
+*.log
+
+# Keep placeholder dirs
+!results/raw/.gitkeep
+!results/processed/.gitkeep
+!results/summaries/.gitkeep
+!reports/outputs/.gitkeep
+!workloads/generated/.gitkeep
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
