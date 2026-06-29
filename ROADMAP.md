@@ -80,9 +80,17 @@
 - Fresh-clone reproducibility guide
 - Combined report support for embedded strategy advisor output
 
-## Next: Public Research Release Guides
+## Done: Public Research Release Guides
 
 - RunPod runbook
 - vLLM/SGLang engine guides
 - Public benchmark result templates
 - Blog-ready report format
+
+## Next: Real Endpoint Result Collection
+
+- First public vLLM real endpoint smoke run
+- First public SGLang real endpoint smoke run
+- Cache and prefix sweep run on a real endpoint
+- Long-context pressure run with memory telemetry
+- Publish one complete result package using the public templates

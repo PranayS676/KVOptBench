@@ -88,3 +88,77 @@ def test_reproducibility_guide_documents_public_release_workflow() -> None:
     assert "missing_metrics" in text
     assert "RunPod" in text
     assert "mock metrics" in text
+
+
+def test_public_release_guides_document_real_endpoint_and_runpod_workflows() -> None:
+    real_endpoint = Path("guides/real_endpoint_vllm_sglang.md")
+    runpod = Path("guides/runpod.md")
+    readme = Path("README.md")
+
+    real_text = real_endpoint.read_text(encoding="utf-8")
+    runpod_text = runpod.read_text(encoding="utf-8")
+    readme_text = readme.read_text(encoding="utf-8")
+
+    assert "examples/vllm_openai_compatible_config.yaml" in real_text
+    assert "examples/sglang_openai_compatible_config.yaml" in real_text
+    assert "kvoptbench endpoint-check" in real_text
+    assert "kvoptbench engine-command" in real_text
+    assert "--enable-prefix-caching" in real_text
+    assert "--disable-radix-cache" in real_text
+    assert "missing_metrics" in real_text
+    assert "https://docs.vllm.ai" in real_text
+    assert "https://docs.sglang.io" in real_text
+
+    assert "https://docs.runpod.io" in runpod_text
+    assert "proxy.runpod.net" in runpod_text
+    assert "/workspace" in runpod_text
+    assert "/runpod-volume" in runpod_text
+    assert "100-second timeout" in runpod_text
+    assert "kvoptbench endpoint-check" in runpod_text
+    assert "Never commit secrets" in runpod_text
+
+    assert "guides/real_endpoint_vllm_sglang.md" in readme_text
+    assert "guides/runpod.md" in readme_text
+
+    public_text = "\n".join([real_text, runpod_text])
+    assert "Milestone" not in public_text
+    assert "C:\\Users" not in public_text
+    assert "OneDrive" not in public_text
+
+
+def test_public_release_templates_have_required_publication_sections() -> None:
+    result_template = Path("examples/public_release/result_template.md")
+    blog_template = Path("examples/public_release/blog_report_template.md")
+
+    result_text = result_template.read_text(encoding="utf-8")
+    blog_text = blog_template.read_text(encoding="utf-8")
+
+    for required in [
+        "Run Identity",
+        "Environment",
+        "Backend Launch",
+        "Workloads",
+        "Artifacts",
+        "Strategy Advisor",
+        "missing_metrics",
+        "Model Revision",
+        "Workload Hash",
+    ]:
+        assert required in result_text
+
+    for required in [
+        "Headline",
+        "TL;DR",
+        "Setup",
+        "Findings",
+        "Quality And Caveats",
+        "Reproduction",
+        "Appendix",
+    ]:
+        assert required in blog_text
+
+    combined = result_text + "\n" + blog_text
+    assert "Do not publish mock metrics as real endpoint results" in combined
+    assert "Milestone" not in combined
+    assert "C:\\Users" not in combined
+    assert "OneDrive" not in combined
