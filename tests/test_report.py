@@ -182,3 +182,65 @@ def test_report_generator_includes_optional_prefix_sweep(tmp_path: Path) -> None
     assert "First meaningful cache gain appears at shared-prefix ratio `0.500`" in report
     assert "meaningful_prefix_cache_gain" in report
 
+
+def test_report_generator_includes_optional_prefill_decode(tmp_path: Path) -> None:
+    summary = tmp_path / "summary.csv"
+    prefill_decode = tmp_path / "prefill_decode.csv"
+    output = tmp_path / "report.md"
+    pd.DataFrame(
+        [
+            {
+                "experiment_id": "exp",
+                "provider": "mock",
+                "engine": "vllm",
+                "model_id": "model",
+                "strategy": "baseline",
+                "workload": "prefill_decode_grid",
+                "concurrency": 1,
+                "requests": 3,
+                "success_rate": 1.0,
+                "ttft_ms_p50": 100.0,
+                "ttft_ms_p95": 120.0,
+                "e2e_latency_ms_p50": 200.0,
+                "e2e_latency_ms_p95": 240.0,
+                "output_tokens_per_second_mean": 20.0,
+                "quality_score_mean": 1.0,
+                "missing_metrics": "",
+            }
+        ]
+    ).to_csv(summary, index=False)
+    pd.DataFrame(
+        [
+            {
+                "provider": "mock",
+                "engine": "vllm",
+                "model_id": "model",
+                "strategy": "baseline",
+                "input_token_bucket": 32768,
+                "output_token_bucket": 32,
+                "expected_bottleneck": "prefill_bound",
+                "ttft_ms_p50": 900.0,
+                "ttft_ms_p95": 900.0,
+                "tpot_ms_mean": 12.0,
+                "itl_ms_mean": 11.0,
+                "output_tokens_per_second_mean": 80.0,
+                "bottleneck_classification": "prefill_bound",
+                "missing_metrics": "",
+                "requests": 1,
+                "success_rate": 1.0,
+            }
+        ]
+    ).to_csv(prefill_decode, index=False)
+
+    generate_report(
+        input_path=summary,
+        output_path=output,
+        prefill_decode_input_path=prefill_decode,
+    )
+
+    report = output.read_text(encoding="utf-8")
+    assert "## Prefill vs Decode" in report
+    assert "input bucket" in report
+    assert "prefill_bound" in report
+    assert "Mock prefill/decode timings validate benchmark wiring only" in report
+

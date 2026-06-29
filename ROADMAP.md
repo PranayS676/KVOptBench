@@ -20,7 +20,7 @@
 - Timeout and retry handling
 - Server metadata capture
 
-## Next: Cache Experiments
+## Done: Cache Experiments
 
 - Prefix cache ablation
 - Radix cache ablation
@@ -28,9 +28,12 @@
 - Cache miss penalty calculation
 - Shared-prefix ratio sweep
 
-## Later: Advanced Inference Experiments
+## Done: Prefill Vs Decode Decomposition
 
 - Prefill vs decode decomposition
+
+## Next: Advanced Inference Experiments
+
 - Long-context pressure sweep
 - KV cache quantization sweep
 - KV offload placeholder/integration

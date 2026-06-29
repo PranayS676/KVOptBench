@@ -21,6 +21,7 @@ def generate_report(
     output_path: str | Path,
     cache_input_path: str | Path | None = None,
     prefix_sweep_input_path: str | Path | None = None,
+    prefill_decode_input_path: str | Path | None = None,
 ) -> Path:
     """Generate a markdown report from a summary CSV."""
     input_path = Path(input_path)
@@ -30,6 +31,7 @@ def generate_report(
         raise ValueError(f"Summary CSV is empty: {input_path}")
     cache_frame = _read_cache_summary(cache_input_path)
     prefix_sweep_frame = _read_prefix_sweep(prefix_sweep_input_path)
+    prefill_decode_frame = _read_prefill_decode(prefill_decode_input_path)
 
     total_requests = int(frame["requests"].sum()) if "requests" in frame else 0
     avg_success = frame["success_rate"].mean() if "success_rate" in frame else None
@@ -144,6 +146,7 @@ def generate_report(
 
     _append_cache_comparison(lines, cache_frame)
     _append_prefix_overlap_sweep(lines, prefix_sweep_frame)
+    _append_prefill_decode(lines, prefill_decode_frame)
 
     lines.extend(["", "## Cache Interpretation", ""])
     if "cache_interpretation" in frame.columns:
@@ -209,6 +212,16 @@ def _read_prefix_sweep(prefix_sweep_input_path: str | Path | None) -> pd.DataFra
     return prefix_sweep_frame
 
 
+def _read_prefill_decode(prefill_decode_input_path: str | Path | None) -> pd.DataFrame | None:
+    if prefill_decode_input_path is None:
+        return None
+    prefill_decode_path = Path(prefill_decode_input_path)
+    prefill_decode_frame = pd.read_csv(prefill_decode_path)
+    if prefill_decode_frame.empty:
+        return pd.DataFrame()
+    return prefill_decode_frame
+
+
 def _append_cache_comparison(lines: list[str], cache_frame: pd.DataFrame | None) -> None:
     lines.extend(
         [
@@ -241,6 +254,55 @@ def _append_cache_comparison(lines: list[str], cache_frame: pd.DataFrame | None)
             f"{_fmt(row.get('random_cache_miss_penalty_ms'))} | "
             f"{_fmt(row.get('control_adjusted_cache_gain_ms'))} | "
             f"{row.get('interpretation', 'unknown')} |"
+        )
+
+
+def _append_prefill_decode(lines: list[str], prefill_decode_frame: pd.DataFrame | None) -> None:
+    lines.extend(["", "## Prefill vs Decode", ""])
+    if prefill_decode_frame is None:
+        lines.append("No prefill/decode CSV was provided.")
+        return
+    if prefill_decode_frame.empty:
+        lines.append("No prefill/decode rows were available.")
+        return
+
+    classifications = sorted(
+        {
+            str(value)
+            for value in prefill_decode_frame.get(
+                "bottleneck_classification", pd.Series(dtype=str)
+            ).dropna()
+            if str(value).strip()
+        }
+    )
+    if classifications:
+        lines.append(
+            "Observed bottleneck classifications: "
+            + ", ".join(f"`{classification}`" for classification in classifications)
+            + "."
+        )
+    else:
+        lines.append("No bottleneck classifications were available.")
+    lines.extend(
+        [
+            "Mock prefill/decode timings validate benchmark wiring only; use real endpoint runs for engine claims.",
+            "",
+            "| engine | strategy | input bucket | output bucket | expected | "
+            "p50 TTFT ms | mean TPOT ms | mean ITL ms | output tok/sec | classification |",
+            "|---|---|---:|---:|---|---:|---:|---:|---:|---|",
+        ]
+    )
+    for _, row in prefill_decode_frame.iterrows():
+        lines.append(
+            f"| {row.get('engine', 'unknown')} | {row.get('strategy', 'unknown')} | "
+            f"{_fmt(row.get('input_token_bucket'))} | "
+            f"{_fmt(row.get('output_token_bucket'))} | "
+            f"{row.get('expected_bottleneck', 'unknown')} | "
+            f"{_fmt(row.get('ttft_ms_p50'))} | "
+            f"{_fmt(row.get('tpot_ms_mean'))} | "
+            f"{_fmt(row.get('itl_ms_mean'))} | "
+            f"{_fmt(row.get('output_tokens_per_second_mean'))} | "
+            f"{row.get('bottleneck_classification', 'unknown')} |"
         )
 
 
@@ -296,12 +358,14 @@ def main() -> None:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--cache-input", type=Path, default=None)
     parser.add_argument("--prefix-sweep-input", type=Path, default=None)
+    parser.add_argument("--prefill-decode-input", type=Path, default=None)
     args = parser.parse_args()
     generate_report(
         input_path=args.input,
         output_path=args.output,
         cache_input_path=args.cache_input,
         prefix_sweep_input_path=args.prefix_sweep_input,
+        prefill_decode_input_path=args.prefill_decode_input,
     )
     print(f"Wrote report to {args.output}")
 

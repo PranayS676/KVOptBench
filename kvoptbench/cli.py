@@ -140,6 +140,62 @@ def prefix_sweep_compare_command(
     print(f"[green]Wrote prefix sweep comparison[/green] {output}")
 
 
+@app.command("prefill-decode-plan")
+def prefill_decode_plan_command(
+    plan_dir: Path = typer.Option(..., "--plan-dir"),
+    experiment_prefix: str = typer.Option(..., "--experiment-prefix"),
+    provider: str = typer.Option(..., "--provider"),
+    engine: str = typer.Option(..., "--engine", "-e"),
+    model_id: str = typer.Option(..., "--model-id", "-m"),
+    base_url: str = typer.Option(..., "--base-url"),
+    workload_file: Path = typer.Option(..., "--workload-file"),
+    output_dir: Path = typer.Option(..., "--output-dir"),
+    concurrency: int = typer.Option(1, "--concurrency", min=1),
+    max_output_tokens: int = typer.Option(512, "--max-output-tokens", min=1),
+) -> None:
+    """Write prefill/decode experiment YAML configs."""
+    from kvoptbench.experiments.prefill_decode import write_prefill_decode_plan_configs
+
+    written = write_prefill_decode_plan_configs(
+        plan_dir=plan_dir,
+        experiment_prefix=experiment_prefix,
+        provider=provider,
+        engine=engine,
+        model_id=model_id,
+        base_url=base_url,
+        workload_file=workload_file,
+        output_dir=output_dir,
+        concurrency=concurrency,
+        max_output_tokens=max_output_tokens,
+    )
+    print(f"[green]Wrote {len(written)} prefill/decode experiment configs[/green] to {plan_dir}")
+
+
+@app.command("prefill-decode-run")
+def prefill_decode_run_command(
+    plan_dir: Path = typer.Option(..., "--plan-dir"),
+) -> None:
+    """Run all YAML configs in a prefill/decode experiment plan directory."""
+    from kvoptbench.experiments.prefill_decode import run_prefill_decode_plan
+
+    outputs = run_prefill_decode_plan(plan_dir)
+    print(f"[green]Ran {len(outputs)} prefill/decode experiment configs[/green]")
+    for output in outputs:
+        print(output)
+
+
+@app.command("prefill-decode-compare")
+def prefill_decode_compare_command(
+    input: Path = typer.Option(..., "--input", "-i"),
+    output: Path = typer.Option(..., "--output", "-o"),
+) -> None:
+    """Compare prefill/decode timing metrics by input/output bucket."""
+    from kvoptbench.analysis.prefill_decode import compare_prefill_decode_results
+
+    compare_prefill_decode_results(input_path=input, output_path=output)
+    print(f"[green]Wrote prefill/decode comparison[/green] {output}")
+
+
 @app.command("generate-workload")
 def generate_workload_command(
     profile: str = typer.Option(..., "--profile", "-p"),
@@ -203,6 +259,7 @@ def report_command(
     output: Path = typer.Option(..., "--output", "-o"),
     cache_input: Path | None = typer.Option(None, "--cache-input"),
     prefix_sweep_input: Path | None = typer.Option(None, "--prefix-sweep-input"),
+    prefill_decode_input: Path | None = typer.Option(None, "--prefill-decode-input"),
 ) -> None:
     """Generate a markdown report from a summary CSV."""
     from kvoptbench.reports.generate import generate_report
@@ -212,6 +269,7 @@ def report_command(
         output_path=output,
         cache_input_path=cache_input,
         prefix_sweep_input_path=prefix_sweep_input,
+        prefill_decode_input_path=prefill_decode_input,
     )
     print(f"[green]Wrote report[/green] {output}")
 

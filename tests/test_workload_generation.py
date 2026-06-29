@@ -78,6 +78,25 @@ def test_partial_prefix_workload_covers_expected_ratios() -> None:
     assert all(item.prefix_group_id == "partial_prefix_doc_001" for item in items[1:])
 
 
+def test_prefill_decode_grid_covers_input_output_buckets() -> None:
+    items = generate_items(
+        profile="prefill_decode_grid",
+        count=12,
+        target_input_tokens=32768,
+        target_output_tokens=512,
+    )
+
+    input_buckets = {item.metadata["input_token_bucket"] for item in items}
+    output_buckets = {item.metadata["output_token_bucket"] for item in items}
+    expected_bottlenecks = {item.metadata["expected_bottleneck"] for item in items}
+
+    assert input_buckets == {512, 2048, 8192, 32768}
+    assert output_buckets == {32, 128, 512}
+    assert expected_bottlenecks == {"prefill_bound", "decode_bound", "mixed"}
+    assert all(item.workload == "prefill_decode_grid" for item in items)
+    assert all(item.category == "prefill_decode" for item in items)
+
+
 def test_needle_workload_contains_expected_answer() -> None:
     items = generate_items(
         profile="long_context_needle",

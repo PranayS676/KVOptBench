@@ -37,7 +37,7 @@ KVOptBench is designed to answer deeper questions:
 
 ## Status
 
-Early project. The local/mock benchmark harness, real OpenAI-compatible endpoint runner, engine profiles, cache experiment planning, cache comparison reporting, and prefix-overlap sweep analysis are in place.
+Early project. The local/mock benchmark harness, real OpenAI-compatible endpoint runner, engine profiles, cache experiment planning, cache comparison reporting, prefix-overlap sweep analysis, and prefill/decode decomposition are in place.
 
 ## Local Mock Quickstart
 
@@ -184,6 +184,29 @@ kvoptbench cache-run --plan-dir configs/prefix_sweep_plan
 kvoptbench summarize --input results/raw --output results/summary.csv
 kvoptbench prefix-sweep-compare --input results/raw --output results/prefix_sweep.csv
 kvoptbench report --input results/summary.csv --prefix-sweep-input results/prefix_sweep.csv --output reports/prefix_sweep_report.md
+```
+
+## Prefill Vs Decode Decomposition
+
+Prefill/decode helpers run a controlled input/output grid and infer bottleneck pressure from request-level timing metrics. TTFT is treated as a prefill-pressure signal, while TPOT, ITL, and output-token throughput are treated as decode-pressure signals. Missing metrics remain unavailable rather than being invented.
+
+```bash
+kvoptbench generate-workload --profile prefill_decode_grid --count 12 --out workloads/generated/prefill_decode_grid.jsonl
+
+kvoptbench prefill-decode-plan \
+  --plan-dir configs/prefill_decode_plan \
+  --experiment-prefix prefill_decode \
+  --provider mock \
+  --engine vllm \
+  --model-id mock-frontier-model \
+  --base-url http://127.0.0.1:8000/v1 \
+  --workload-file workloads/generated/prefill_decode_grid.jsonl \
+  --output-dir results/raw
+
+kvoptbench prefill-decode-run --plan-dir configs/prefill_decode_plan
+kvoptbench summarize --input results/raw --output results/summary.csv
+kvoptbench prefill-decode-compare --input results/raw --output results/prefill_decode.csv
+kvoptbench report --input results/summary.csv --prefill-decode-input results/prefill_decode.csv --output reports/prefill_decode_report.md
 ```
 
 ## License
