@@ -40,9 +40,16 @@
 - Pressure classification for stable, prefill-growth, throughput-degraded, failed, or insufficient-signal runs
 - Markdown report integration
 
+## Done: KV Cache Quantization
+
+- Baseline vs quantized KV cache planning
+- vLLM and SGLang `kv_fp8` strategy comparison
+- Latency, throughput, quality, success-rate, and memory delta analysis
+- Missing telemetry preservation for unavailable memory metrics
+- Markdown report integration
+
 ## Next: Advanced Inference Experiments
 
-- KV cache quantization sweep
 - KV offload placeholder/integration
 - Speculative decoding sweep
 - Prefill/decode disaggregation placeholder/integration

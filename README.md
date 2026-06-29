@@ -37,7 +37,7 @@ KVOptBench is designed to answer deeper questions:
 
 ## Status
 
-Early project. The local/mock benchmark harness, real OpenAI-compatible endpoint runner, engine profiles, cache experiment planning, cache comparison reporting, prefix-overlap sweep analysis, prefill/decode decomposition, and long-context pressure analysis are in place.
+Early project. The local/mock benchmark harness, real OpenAI-compatible endpoint runner, engine profiles, cache experiment planning, cache comparison reporting, prefix-overlap sweep analysis, prefill/decode decomposition, long-context pressure analysis, and KV cache quantization comparison are in place.
 
 ## Local Mock Quickstart
 
@@ -243,6 +243,31 @@ kvoptbench generate-workload \
 ```
 
 Mock timings validate harness wiring only. Use real vLLM and SGLang endpoint runs before making engine-level claims, and treat unavailable engine/GPU metrics as missing rather than zero.
+
+## KV Cache Quantization
+
+KV quantization helpers compare a baseline run against a quantized KV cache strategy, currently `kv_fp8`, using the same workload and endpoint shape. The default path uses `long_context_pressure` because KV cache precision tradeoffs matter most when context length creates memory pressure. KVOptBench reports latency, throughput, success rate, quality, and memory deltas when real memory telemetry is available.
+
+```bash
+kvoptbench generate-workload --profile long_context_pressure --count 5 --out workloads/generated/long_context_pressure.jsonl
+
+kvoptbench kv-quant-plan \
+  --plan-dir configs/kv_quant_plan \
+  --experiment-prefix kv_quant \
+  --provider mock \
+  --engine vllm \
+  --model-id mock-frontier-model \
+  --base-url http://127.0.0.1:8000/v1 \
+  --workload-file workloads/generated/long_context_pressure.jsonl \
+  --output-dir results/raw
+
+kvoptbench kv-quant-run --plan-dir configs/kv_quant_plan
+kvoptbench summarize --input results/raw --output results/summary.csv
+kvoptbench kv-quant-compare --input results/raw --output results/kv_quantization.csv
+kvoptbench report --input results/summary.csv --kv-quant-input results/kv_quantization.csv --output reports/kv_quantization_report.md
+```
+
+Mock runs validate the comparison shape only. For real vLLM and SGLang runs, verify the engine flags, model support, and any reported GPU/KV memory telemetry before interpreting capacity benefits. Missing memory telemetry remains unavailable rather than being treated as zero.
 
 ## License
 

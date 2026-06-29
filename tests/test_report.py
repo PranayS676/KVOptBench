@@ -308,3 +308,76 @@ def test_report_generator_includes_optional_long_context(tmp_path: Path) -> None
     assert "prefill_latency_growth" in report
     assert "Mock long-context timings validate benchmark wiring only" in report
 
+
+def test_report_generator_includes_optional_kv_quantization(tmp_path: Path) -> None:
+    summary = tmp_path / "summary.csv"
+    kv_quantization = tmp_path / "kv_quantization.csv"
+    output = tmp_path / "report.md"
+    pd.DataFrame(
+        [
+            {
+                "experiment_id": "exp",
+                "provider": "mock",
+                "engine": "vllm",
+                "model_id": "model",
+                "strategy": "kv_fp8",
+                "workload": "long_context_pressure",
+                "concurrency": 1,
+                "requests": 3,
+                "success_rate": 1.0,
+                "ttft_ms_p50": 100.0,
+                "ttft_ms_p95": 120.0,
+                "e2e_latency_ms_p50": 200.0,
+                "e2e_latency_ms_p95": 240.0,
+                "output_tokens_per_second_mean": 20.0,
+                "quality_score_mean": 0.99,
+                "missing_metrics": "",
+            }
+        ]
+    ).to_csv(summary, index=False)
+    pd.DataFrame(
+        [
+            {
+                "provider": "mock",
+                "engine": "vllm",
+                "model_id": "model",
+                "workload": "long_context_pressure",
+                "context_token_bucket": 32768,
+                "baseline_strategy": "baseline",
+                "quantized_strategy": "kv_fp8",
+                "baseline_ttft_ms_p50": 500.0,
+                "quantized_ttft_ms_p50": 520.0,
+                "ttft_delta_pct": 4.0,
+                "baseline_e2e_latency_ms_p50": 1000.0,
+                "quantized_e2e_latency_ms_p50": 930.0,
+                "e2e_delta_pct": -7.0,
+                "baseline_output_tokens_per_second_mean": 60.0,
+                "quantized_output_tokens_per_second_mean": 68.0,
+                "throughput_delta_pct": 13.333,
+                "baseline_quality_score_mean": 1.0,
+                "quantized_quality_score_mean": 0.99,
+                "quality_delta": -0.01,
+                "baseline_gpu_memory_peak_gb": 20.0,
+                "quantized_gpu_memory_peak_gb": 12.0,
+                "memory_delta_pct": -40.0,
+                "missing_metrics": "",
+                "requests": 2,
+                "baseline_success_rate": 1.0,
+                "quantized_success_rate": 1.0,
+                "quantization_interpretation": "quantization_promising",
+            }
+        ]
+    ).to_csv(kv_quantization, index=False)
+
+    generate_report(
+        input_path=summary,
+        output_path=output,
+        kv_quant_input_path=kv_quantization,
+    )
+
+    report = output.read_text(encoding="utf-8")
+    assert "## KV Cache Quantization" in report
+    assert "quantization_promising" in report
+    assert "memory delta %" in report
+    assert "Mock KV quantization timings validate benchmark wiring only" in report
+
