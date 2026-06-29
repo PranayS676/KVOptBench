@@ -11,9 +11,14 @@ def test_engine_registry_includes_vllm_and_sglang_with_matching_core_strategies(
     assert {"vllm", "sglang"}.issubset(profiles)
     for engine in ["vllm", "sglang"]:
         strategy_names = set(profiles[engine].strategies)
-        assert {"baseline", "cache_off", "cache_on", "kv_fp8", "speculative_decoding"}.issubset(
-            strategy_names
-        )
+        assert {
+            "baseline",
+            "cache_off",
+            "cache_on",
+            "kv_fp8",
+            "kv_offload",
+            "speculative_decoding",
+        }.issubset(strategy_names)
 
 
 def test_get_engine_profile_rejects_unknown_engine() -> None:
@@ -56,4 +61,17 @@ def test_render_sglang_cache_command_uses_radix_cache_language() -> None:
     assert "radix" in preview.description.lower()
     assert "--disable-radix-cache" not in preview.command
     assert preview.endpoint.healthcheck_path == "/v1/models"
+
+
+def test_render_kv_offload_command_is_marked_as_placeholder() -> None:
+    for engine in ["vllm", "sglang"]:
+        preview = render_command_preview(
+            engine=engine,
+            strategy="kv_offload",
+            model_id="example/model",
+        )
+
+        assert preview.strategy == "kv_offload"
+        assert "<kv-offload-flags>" in preview.command
+        assert "engine-specific validation" in preview.notes
 

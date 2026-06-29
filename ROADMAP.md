@@ -48,9 +48,16 @@
 - Missing telemetry preservation for unavailable memory metrics
 - Markdown report integration
 
+## Done: KV Offload Experiment Support
+
+- Baseline vs KV offload planning
+- vLLM and SGLang `kv_offload` placeholder strategy comparison
+- Latency, throughput, quality, success-rate, and memory delta analysis
+- Missing telemetry preservation for unavailable memory metrics
+- Markdown report integration
+
 ## Next: Advanced Inference Experiments
 
-- KV offload placeholder/integration
 - Speculative decoding sweep
 - Prefill/decode disaggregation placeholder/integration
 
