@@ -58,3 +58,38 @@ def test_load_config_rejects_invalid_concurrency(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match="concurrency"):
         load_config(config_path)
 
+
+def test_load_config_supports_real_endpoint_fields(tmp_path: Path) -> None:
+    config_path = _write_config(
+        tmp_path / "real_endpoint.yaml",
+        "\n".join(
+            [
+                "endpoint_type: vllm",
+                "healthcheck_path: /v1/models",
+                "retries: 2",
+                "retry_backoff_seconds: 0.25",
+                "request_timeout_seconds: 30",
+                "capture_response_headers: true",
+                "endpoint_metadata:",
+                "  deployment: local-vllm",
+            ]
+        ),
+    )
+
+    config = load_config(config_path)
+
+    assert config.endpoint_type == "vllm"
+    assert config.healthcheck_path == "/v1/models"
+    assert config.retries == 2
+    assert config.retry_backoff_seconds == 0.25
+    assert config.request_timeout_seconds == 30
+    assert config.capture_response_headers is True
+    assert config.endpoint_metadata["deployment"] == "local-vllm"
+
+
+def test_load_config_rejects_unknown_endpoint_type(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path / "bad_endpoint.yaml", "endpoint_type: custom_engine")
+
+    with pytest.raises(ConfigError, match="endpoint_type"):
+        load_config(config_path)
+

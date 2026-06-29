@@ -26,6 +26,8 @@ class ExperimentConfig(BaseModel):
     model_id: str
     strategy: str
     base_url: str
+    endpoint_type: Literal["mock", "openai_compatible", "vllm", "sglang"] = "mock"
+    healthcheck_path: str = "/v1/models"
     api_key_env: str | None = None
     workload_file: Path
     output_file: Path
@@ -34,7 +36,12 @@ class ExperimentConfig(BaseModel):
     max_tasks: int | None = Field(default=None, ge=1)
     max_output_tokens: int = Field(default=256, ge=1)
     timeout_seconds: float = Field(default=120, gt=0)
+    request_timeout_seconds: float | None = Field(default=None, gt=0)
+    retries: int = Field(default=0, ge=0)
+    retry_backoff_seconds: float = Field(default=0.25, ge=0)
+    capture_response_headers: bool = False
     stream: bool = True
+    endpoint_metadata: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("experiment_id", "provider", "engine", "model_id", "strategy", "base_url")
@@ -95,6 +102,18 @@ class TimedResponse(BaseModel):
     error_type: str | None = None
     error_message: str | None = None
     response_metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class EndpointHealth(BaseModel):
+    """Health and metadata captured from an OpenAI-compatible endpoint."""
+
+    ok: bool
+    url: str
+    status_code: int | None = None
+    error_message: str | None = None
+    model_ids: list[str] = Field(default_factory=list)
+    headers: dict[str, str] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class RequestResult(BaseModel):
