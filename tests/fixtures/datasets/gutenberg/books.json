@@ -1,0 +1,16 @@
+{
+  "books": [
+    {
+      "book_id": "1342",
+      "title": "Pride and Prejudice Tiny Fixture",
+      "file": "book_1342.txt",
+      "rights_note": "Tiny public-domain style fixture for tests; do not treat as Project Gutenberg text."
+    },
+    {
+      "book_id": "84",
+      "title": "Frankenstein Tiny Fixture",
+      "file": "book_84.txt",
+      "rights_note": "Tiny public-domain style fixture for tests; do not treat as Project Gutenberg text."
+    }
+  ]
+}

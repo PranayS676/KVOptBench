@@ -1,0 +1,3 @@
+The experiment began on a dreary night of November with a long prompt and a deterministic answer hidden inside it.
+
+The observer recorded context length, cache state, and whether the model could retrieve the expected phrase without confusing it with nearby text.
