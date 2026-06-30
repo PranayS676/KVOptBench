@@ -1,5 +1,7 @@
 # KVOptBench
 
+![KVOptBench cache-aware LLM inference benchmark overview](assets/kvoptbench-readme-hero.png)
+
 KVOptBench is a cache-aware LLM inference benchmark and strategy advisor.
 
 It does not replace serving engines such as vLLM, SGLang, LMCache, Mooncake, or
