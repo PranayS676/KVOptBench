@@ -24,7 +24,7 @@ def test_dataset_prepare_cli_writes_qasper_workload_and_manifest(tmp_path: Path)
             "--split",
             "validation",
             "--source-path",
-            "tests/fixtures/datasets/qasper_tiny.jsonl",
+            "tests/fixtures/datasets/qasper_tiny.json",
             "--out",
             str(out),
             "--manifest",

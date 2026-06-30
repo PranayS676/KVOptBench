@@ -1,0 +1,84 @@
+[
+  {
+    "paper_id": "paper-alpha",
+    "title": "Cache Aware Serving",
+    "abstract": "This paper studies prefix cache behavior for long document question answering.",
+    "sections": [
+      {
+        "heading": "Introduction",
+        "text": "Prefix reuse can reduce time to first token when several questions share the same long document. The cache benefit should be visible in warm runs."
+      },
+      {
+        "heading": "Results",
+        "text": "The experiments show that cache hits lower prefill latency while random prefixes do not create the same reuse."
+      }
+    ],
+    "questions": [
+      {
+        "question_id": "q1",
+        "question": "What does prefix reuse reduce?",
+        "answers": [
+          {
+            "answer": "time to first token",
+            "answer_type": "extractive",
+            "evidence": ["Prefix reuse can reduce time to first token"]
+          }
+        ]
+      },
+      {
+        "question_id": "q2",
+        "question": "What should random prefixes not create?",
+        "answers": [
+          {
+            "answer": "the same reuse",
+            "answer_type": "extractive",
+            "evidence": ["random prefixes do not create the same reuse"]
+          }
+        ]
+      }
+    ],
+    "license": "cc-by-4.0",
+    "rights_note": "Tiny fixture derived for tests; use upstream QASPER license for real data."
+  },
+  {
+    "paper_id": "paper-beta",
+    "title": "Long Context Evaluation",
+    "abstract": "This paper studies long-context pressure and answer quality.",
+    "sections": [
+      {
+        "heading": "Method",
+        "text": "Needle retrieval tests place a known answer in a long context and ask the model to recover it."
+      },
+      {
+        "heading": "Findings",
+        "text": "Quality checks should run with latency checks so a faster configuration does not hide incorrect answers."
+      }
+    ],
+    "questions": [
+      {
+        "question_id": "q1",
+        "question": "What do needle retrieval tests place in context?",
+        "answers": [
+          {
+            "answer": "a known answer",
+            "answer_type": "extractive",
+            "evidence": ["place a known answer in a long context"]
+          }
+        ]
+      },
+      {
+        "question_id": "q2",
+        "question": "What should run with latency checks?",
+        "answers": [
+          {
+            "answer": "Quality checks",
+            "answer_type": "extractive",
+            "evidence": ["Quality checks should run with latency checks"]
+          }
+        ]
+      }
+    ],
+    "license": "cc-by-4.0",
+    "rights_note": "Tiny fixture derived for tests; use upstream QASPER license for real data."
+  }
+]

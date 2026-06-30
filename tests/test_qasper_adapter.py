@@ -6,7 +6,7 @@ from kvoptbench.datasets.qasper import QasperAdapter
 from kvoptbench.runner.experiment import load_workload
 
 
-FIXTURE = Path("tests/fixtures/datasets/qasper_tiny.jsonl")
+FIXTURE = Path("tests/fixtures/datasets/qasper_tiny.json")
 
 
 def _prepare(tmp_path: Path, mode: str, max_items: int | None = None):

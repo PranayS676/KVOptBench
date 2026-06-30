@@ -28,7 +28,7 @@ def test_dataset_workload_runs_against_mock_server_and_preserves_metadata(
                 source="qasper",
                 mode="shared_prefix",
                 split="validation",
-                source_path=Path("tests/fixtures/datasets/qasper_tiny.jsonl"),
+                source_path=Path("tests/fixtures/datasets/qasper_tiny.json"),
                 out=workload_path,
                 manifest=manifest_path,
                 max_items=2,
