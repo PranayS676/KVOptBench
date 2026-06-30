@@ -86,13 +86,43 @@
 - vLLM/SGLang engine guides
 - First real benchmark guide
 - Provider-neutral endpoint example configs
+- Public dataset selection guide
+- Dataset adapter contract reference
+- Frontier dataset pack recipe
 - Public benchmark result templates
 - Blog-ready report format
 
+## Done: Public Dataset Preparation
+
+- Dataset preparation CLI
+- Workload and dataset manifest schemas
+- QASPER shared-prefix and random-prefix adapter
+- QASPER partial-prefix sweep adapter
+- Project Gutenberg long-context needle adapter
+- Project Gutenberg no-needle, multi-needle, and conflicting-needle controls
+- LongBench long-context adapter
+- BEIR SciFact RAG adapter
+- BFCL tool-calling adapter
+- Optional download/cache support for public sources
+- Dataset manifest writer with workload hashes
+- Tiny adapter fixtures that do not require network access
+- Offline adapter tests and gated real-download smoke test
+- Documentation tests for dataset sources, manifests, and adapter contract fields
+
 ## Next: Real Endpoint Result Collection
 
-- First public vLLM real endpoint smoke run
-- First public SGLang real endpoint smoke run
-- Cache and prefix sweep run on a real endpoint
+- First public cache run on one real vLLM or SGLang endpoint
+- QASPER shared-prefix vs random-prefix controls at 8K and 32K
+- Concurrency 1, 4, and 8 with cold and warm passes
+- Cache and partial-prefix sweep run on a real endpoint
 - Long-context pressure run with memory telemetry
+- RAG and tool-calling smoke runs on BEIR SciFact and BFCL
 - Publish one complete result package using the public templates
+
+## Next: Public Result Packaging
+
+- Result package generator with manifests, samples, missing metrics, plots, and limitations
+- Example real endpoint package layout
+- Stronger RAG citation evaluator
+- Stronger BFCL tool-call evaluator
+- Dataset download provenance snapshots for published runs
