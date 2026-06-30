@@ -10,6 +10,8 @@ from rich import print
 from kvoptbench.config import ConfigError, validate_config
 
 app = typer.Typer(help="KVOptBench cache-aware LLM inference benchmark.")
+dataset_app = typer.Typer(help="Prepare public dataset workloads.")
+app.add_typer(dataset_app, name="dataset")
 
 
 @app.command("validate-config")
@@ -68,6 +70,59 @@ def engine_command_command(
     print(f"[cyan]{preview.command}[/cyan]")
     print(f"Endpoint: {preview.endpoint.base_url}")
     print(f"Notes: {preview.notes}")
+
+
+@dataset_app.command("prepare")
+def dataset_prepare_command(
+    source: str = typer.Option(..., "--source"),
+    mode: str = typer.Option(..., "--mode"),
+    out: Path = typer.Option(..., "--out", "-o"),
+    manifest: Path = typer.Option(..., "--manifest"),
+    source_path: Path | None = typer.Option(None, "--source-path"),
+    split: str | None = typer.Option(None, "--split"),
+    max_items: int | None = typer.Option(None, "--max-items", min=1),
+    seed: int = typer.Option(7, "--seed"),
+    target_input_tokens: int = typer.Option(32768, "--target-input-tokens", min=1),
+    target_output_tokens: int = typer.Option(256, "--target-output-tokens", min=1),
+    context_buckets: str | None = typer.Option(None, "--context-buckets"),
+    book_ids: str | None = typer.Option(None, "--book-ids"),
+    download: bool = typer.Option(False, "--download"),
+    tokenizer_id: str | None = typer.Option(None, "--tokenizer-id"),
+    tokenizer_revision: str | None = typer.Option(None, "--tokenizer-revision"),
+) -> None:
+    """Prepare a public dataset workload JSONL file and manifest."""
+    from kvoptbench.datasets.manifest import DatasetPrepareOptions
+    from kvoptbench.datasets.registry import get_dataset_adapter
+
+    try:
+        adapter = get_dataset_adapter(source)
+        result = adapter.prepare(
+            DatasetPrepareOptions(
+                source=source,
+                mode=mode,
+                out=out,
+                manifest=manifest,
+                source_path=source_path,
+                split=split,
+                max_items=max_items,
+                seed=seed,
+                target_input_tokens=target_input_tokens,
+                target_output_tokens=target_output_tokens,
+                context_buckets=_parse_context_buckets(context_buckets) or (),
+                book_ids=_parse_csv_strings(book_ids),
+                download=download,
+                tokenizer_id=tokenizer_id,
+                tokenizer_revision=tokenizer_revision,
+            )
+        )
+    except ValueError as exc:
+        print(f"[red]FAILED[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    print(
+        f"[green]Wrote {result.row_count} dataset workload rows[/green] "
+        f"to {result.output_path}"
+    )
+    print(f"[green]Wrote manifest[/green] {result.manifest_path}")
 
 
 @app.command("cache-plan")
@@ -647,6 +702,12 @@ def _parse_context_buckets(raw: str | None) -> tuple[int, ...] | None:
     if raw is None or not raw.strip():
         return None
     return tuple(int(value.strip()) for value in raw.split(",") if value.strip())
+
+
+def _parse_csv_strings(raw: str | None) -> tuple[str, ...]:
+    if raw is None or not raw.strip():
+        return ()
+    return tuple(value.strip() for value in raw.split(",") if value.strip())
 
 
 if __name__ == "__main__":

@@ -57,6 +57,8 @@ class WorkloadItem(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+    schema_version: str = "1"
+    workload_item_version: str = "1"
     task_id: str
     workload: str
     category: str

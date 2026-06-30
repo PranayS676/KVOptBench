@@ -1,0 +1,3 @@
+It is a truth universally acknowledged that a benchmark in possession of a long context must be in want of careful cache measurement.
+
+The family discussed latency, memory pressure, and quality in the same sitting. Every repeated passage was kept stable so prefix reuse could be measured without inventing private data.
