@@ -1,0 +1,12 @@
+[
+  {
+    "_id": "doc-1",
+    "title": "Cache reuse study",
+    "text": "Prefix cache reuse can lower time to first token for repeated long contexts."
+  },
+  {
+    "_id": "doc-2",
+    "title": "Decode bottleneck study",
+    "text": "Decode-heavy requests are dominated by per-token generation latency."
+  }
+]

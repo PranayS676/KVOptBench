@@ -7,7 +7,9 @@ import time
 from pathlib import Path
 from typing import Any
 
+from kvoptbench.datasets.cache import resolve_dataset_cache_dir, write_json_records
 from kvoptbench.datasets.hashing import sha256_text
+from kvoptbench.datasets.huggingface import load_hf_dataset_records
 from kvoptbench.datasets.manifest import (
     DatasetAdapterInfo,
     DatasetPrepareOptions,
@@ -21,6 +23,8 @@ from kvoptbench.datasets.token_counting import count_tokens
 from kvoptbench.schemas import WorkloadItem, utc_now_iso
 
 QASPER_SOURCE_URL = "https://huggingface.co/datasets/allenai/qasper"
+QASPER_HF_DATASET = "allenai/qasper"
+QASPER_DOWNLOAD_DEFAULT_MAX_ITEMS = 100
 QASPER_TEMPLATE = (
     "You are given a paper excerpt. Answer the question using only the paper context.\n\n"
     "Paper:\n{prefix}\n\nQuestion: {question}\nAnswer:"
@@ -38,53 +42,61 @@ class QasperAdapter:
         supported_modes=("shared_prefix", "random_prefix", "partial_prefix_sweep"),
         license="cc-by-4.0",
         rights_note="Use upstream QASPER attribution and license terms for real data.",
-        download_supported=False,
+        download_supported=True,
         fixture_supported=True,
     )
 
     def prepare(self, options: DatasetPrepareOptions) -> DatasetPrepareResult:
         if options.mode not in self.info.supported_modes:
             raise ValueError(f"QASPER adapter does not support mode '{options.mode}'")
-        if options.download:
-            raise ValueError("QASPER downloads are not implemented; pass --source-path")
-        if options.source_path is None:
-            raise ValueError("QASPER adapter requires --source-path")
+        run_options = _options_with_download_defaults(options)
+        source_path, download_meta = _resolve_source_path(run_options)
 
         started = time.perf_counter()
         started_at = utc_now_iso()
-        records = _load_records(options.source_path)
-        items, exclusions = _generate_items(records, options)
-        if options.max_items is not None:
-            items = items[: options.max_items]
+        records = _load_records(source_path)
+        items, exclusions = _generate_items(records, run_options)
+        if run_options.max_items is not None:
+            items = items[: run_options.max_items]
         if not items:
             raise ValueError("QASPER adapter produced no workload rows")
 
-        workload_sha256 = write_workload_jsonl(items, options.out)
+        workload_sha256 = write_workload_jsonl(items, run_options.out)
         finished_at = utc_now_iso()
         manifest = build_manifest(
             info=self.info,
-            options=options,
+            options=run_options,
             items=items,
             workload_sha256=workload_sha256,
-            prompt_template=f"qasper_{options.mode}_v1",
+            prompt_template=f"qasper_{run_options.mode}_v1",
             prompt_template_text=QASPER_TEMPLATE,
-            license_review_status="fixture_only",
-            redistribution_policy="tiny_fixture_allowed",
+            license_review_status=_license_review_status(run_options),
+            redistribution_policy=_redistribution_policy(run_options),
             excluded_reasons=exclusions,
             rights_note=self.info.rights_note,
-            source_sha256=source_hash(options.source_path),
+            source_sha256=source_hash(source_path),
             generation_started_at=started_at,
             generation_finished_at=finished_at,
             generation_duration_sec=round(time.perf_counter() - started, 3),
+            cache_path=download_meta.get("cache_path"),
+            download_method=download_meta.get("download_method"),
+            downloaded_at=download_meta.get("downloaded_at"),
+            source_url=download_meta.get("source_url"),
+            source_revision=run_options.dataset_revision,
             known_limitations=[
-                "Default implementation reads local fixture/source files only; no network download.",
+                (
+                    "Downloaded rows are cached locally; raw public dataset files should not "
+                    "be committed."
+                )
+                if run_options.download
+                else "Local fixture/source mode does not perform network download.",
                 "Token counts use char_approx_4 unless a future tokenizer adapter is provided.",
             ],
         )
-        write_manifest(manifest, options.manifest)
+        write_manifest(manifest, run_options.manifest)
         return DatasetPrepareResult(
-            output_path=options.out,
-            manifest_path=options.manifest,
+            output_path=run_options.out,
+            manifest_path=run_options.manifest,
             row_count=len(items),
             workload_sha256=workload_sha256,
             excluded_count=len(exclusions),
@@ -266,7 +278,7 @@ def _make_item(
         "dataset": "qasper",
         "source": "qasper",
         "dataset_source_url": QASPER_SOURCE_URL,
-        "dataset_revision": None,
+        "dataset_revision": options.dataset_revision,
         "source_license": "cc-by-4.0",
         "mode": mode,
         "control_type": control_type,
@@ -302,8 +314,8 @@ def _make_item(
         "redistributable_prompt": False,
         "redistributable_output": False,
         "rights_note": "Use upstream QASPER attribution and license terms for real data.",
-        "license_review_status": "fixture_only",
-        "redistribution_policy": "tiny_fixture_allowed",
+        "license_review_status": _license_review_status(options),
+        "redistribution_policy": _redistribution_policy(options),
     }
     return WorkloadItem(
         task_id=task_id,
@@ -354,6 +366,57 @@ def _load_records(path: Path) -> list[dict[str, Any]]:
         except json.JSONDecodeError as exc:
             raise ValueError(f"Invalid QASPER JSONL line {line_no}: {exc}") from exc
     return records
+
+
+def _options_with_download_defaults(options: DatasetPrepareOptions) -> DatasetPrepareOptions:
+    if options.download and options.max_items is None:
+        return options.model_copy(update={"max_items": QASPER_DOWNLOAD_DEFAULT_MAX_ITEMS})
+    return options
+
+
+def _resolve_source_path(options: DatasetPrepareOptions) -> tuple[Path, dict[str, str | None]]:
+    if options.download:
+        return _download_qasper_source(options)
+    if options.source_path is None:
+        raise ValueError("QASPER adapter requires --source-path or --download")
+    return options.source_path, {}
+
+
+def _download_qasper_source(options: DatasetPrepareOptions) -> tuple[Path, dict[str, str | None]]:
+    split = options.split or "validation"
+    cache_dir = resolve_dataset_cache_dir("qasper", options.cache_dir)
+    cache_path = cache_dir / f"{split}.json"
+    if cache_path.exists() and not options.force:
+        return cache_path, {
+            "cache_path": str(cache_path),
+            "download_method": "huggingface.datasets",
+            "downloaded_at": None,
+            "source_url": QASPER_SOURCE_URL,
+        }
+
+    records = load_hf_dataset_records(
+        QASPER_HF_DATASET,
+        split=split,
+        revision=options.dataset_revision,
+        max_items=options.max_items,
+    )
+    if not records:
+        raise ValueError(f"QASPER download returned no records for split '{split}'")
+    write_json_records(cache_path, records, force=True)
+    return cache_path, {
+        "cache_path": str(cache_path),
+        "download_method": "huggingface.datasets",
+        "downloaded_at": utc_now_iso(),
+        "source_url": QASPER_SOURCE_URL,
+    }
+
+
+def _license_review_status(options: DatasetPrepareOptions) -> str:
+    return "upstream_license_checked" if options.download else "fixture_only"
+
+
+def _redistribution_policy(options: DatasetPrepareOptions) -> str:
+    return "generated_workloads_not_redistributable" if options.download else "tiny_fixture_allowed"
 
 
 def _record_id(record: dict[str, Any]) -> str:

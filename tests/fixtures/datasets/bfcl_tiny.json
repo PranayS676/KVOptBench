@@ -1,0 +1,38 @@
+[
+  {
+    "id": "bfcl-1",
+    "question": "Look up order 123 and return the current status.",
+    "tools": [
+      {
+        "name": "lookup_order",
+        "description": "Fetch order status by order id.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "order_id": {"type": "string"}
+          },
+          "required": ["order_id"]
+        }
+      }
+    ],
+    "expected_tool": "lookup_order"
+  },
+  {
+    "id": "bfcl-2",
+    "question": "Create a support ticket for a delayed shipment.",
+    "tools": [
+      {
+        "name": "create_ticket",
+        "description": "Open a customer support ticket.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "reason": {"type": "string"}
+          },
+          "required": ["reason"]
+        }
+      }
+    ],
+    "expected_tool": "create_ticket"
+  }
+]
