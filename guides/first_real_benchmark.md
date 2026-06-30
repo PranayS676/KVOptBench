@@ -85,6 +85,12 @@ Run the benchmark:
 kvoptbench run --config examples/vllm_openai_compatible_config.yaml
 kvoptbench summarize --input results/raw --output results/summary.csv
 kvoptbench report --input results/summary.csv --output reports/outputs/real_endpoint_report.md
+kvoptbench result-package \
+  --summary results/summary.csv \
+  --raw-input results/raw \
+  --report reports/outputs/real_endpoint_report.md \
+  --config examples/vllm_openai_compatible_config.yaml \
+  --output-dir results/packages/real_endpoint_smoke
 ```
 
 If the endpoint check fails, fix server reachability, auth, `base_url`, or `model_id` before
@@ -206,7 +212,30 @@ telemetry is unavailable, it should report the missing data instead of inferring
 
 ## Result Package
 
-Before publishing, fill `examples/public_release/result_template.md` with:
+Before publishing, generate a package from the completed artifacts:
+
+```bash
+kvoptbench result-package \
+  --summary results/summary.csv \
+  --raw-input results/raw \
+  --workload workloads/generated/qasper_shared_prefix_32k.jsonl \
+  --workload workloads/generated/qasper_random_prefix_32k.jsonl \
+  --dataset-manifest workloads/generated/qasper_shared_prefix_manifest.json \
+  --dataset-manifest workloads/generated/qasper_random_prefix_manifest.json \
+  --report reports/outputs/real_endpoint_report.md \
+  --report reports/outputs/strategy_advisor.md \
+  --config examples/vllm_openai_compatible_config.yaml \
+  --artifact results/cache_summary.csv \
+  --artifact reports/outputs/strategy_advisor.json \
+  --output-dir results/packages/qasper_cache_real_endpoint
+```
+
+The package writes `README_result.md`, `run_manifest.json`, `missing_metrics.json`,
+package-relative artifact paths, SHA-256 hashes, workload samples, dataset manifest copies,
+and redacted config snapshots.
+
+Before publishing, review the generated files and fill any remaining manual details from
+`examples/public_release/result_template.md`, including:
 
 - `README_result.md`
 - run manifest path and hash

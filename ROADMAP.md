@@ -109,6 +109,15 @@
 - Offline adapter tests and gated real-download smoke test
 - Documentation tests for dataset sources, manifests, and adapter contract fields
 
+## Done: Result Package Generation
+
+- `kvoptbench result-package` command for completed benchmark artifacts
+- Package manifest with package-relative paths, hashes, summary metadata, and artifact inventory
+- Missing-metric JSON with explicit unavailable-telemetry explanations
+- Workload samples and dataset manifest copies for provenance review
+- Redacted config snapshots to avoid publishing endpoint URLs or secret-bearing fields
+- README and reproducibility guide updates for local package generation
+
 ## Next: Real Endpoint Result Collection
 
 - First public cache run on one real vLLM or SGLang endpoint
@@ -121,7 +130,7 @@
 
 ## Next: Public Result Packaging
 
-- Result package generator with manifests, samples, missing metrics, plots, and limitations
+- Optional plot generation for packaged benchmark outputs
 - Example real endpoint package layout
 - Stronger RAG citation evaluator
 - Stronger BFCL tool-call evaluator

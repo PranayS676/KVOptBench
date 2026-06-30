@@ -651,6 +651,66 @@ def report_command(
     print(f"[green]Wrote report[/green] {output}")
 
 
+@app.command("result-package")
+def result_package_command(
+    summary: Path = typer.Option(..., "--summary", help="Summary CSV for the run."),
+    output_dir: Path = typer.Option(..., "--output-dir", help="Directory to write package files."),
+    raw_input: list[Path] = typer.Option(
+        [],
+        "--raw-input",
+        help="Raw result JSONL file or directory. Can be repeated.",
+    ),
+    workload: list[Path] = typer.Option(
+        [],
+        "--workload",
+        help="Workload JSONL file. Can be repeated.",
+    ),
+    dataset_manifest: list[Path] = typer.Option(
+        [],
+        "--dataset-manifest",
+        help="Dataset manifest JSON file. Can be repeated.",
+    ),
+    report: list[Path] = typer.Option(
+        [],
+        "--report",
+        help="Markdown report file. Can be repeated.",
+    ),
+    config: list[Path] = typer.Option(
+        [],
+        "--config",
+        help="Experiment config file to snapshot with redaction. Can be repeated.",
+    ),
+    artifact: list[Path] = typer.Option(
+        [],
+        "--artifact",
+        help="Extra artifact file to copy into the package. Can be repeated.",
+    ),
+    run_name: str | None = typer.Option(None, "--run-name"),
+    sample_rows: int = typer.Option(3, "--sample-rows", min=0),
+) -> None:
+    """Build a reproducible result package from completed benchmark artifacts."""
+    from kvoptbench.packaging.result_package import build_result_package
+
+    try:
+        package = build_result_package(
+            output_dir=output_dir,
+            summary_path=summary,
+            raw_input_paths=raw_input,
+            workload_paths=workload,
+            dataset_manifest_paths=dataset_manifest,
+            report_paths=report,
+            config_paths=config,
+            extra_artifact_paths=artifact,
+            sample_rows=sample_rows,
+            run_name=run_name,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[red]FAILED[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    print(f"[green]Wrote result package[/green] {package.output_dir}")
+    print(f"[green]Wrote manifest[/green] {package.manifest_path}")
+
+
 @app.command("strategy-select")
 def strategy_select_command(
     input: Path = typer.Option(..., "--input", "-i"),
