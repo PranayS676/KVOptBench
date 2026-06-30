@@ -74,6 +74,27 @@ kvoptbench report \
   --output reports/outputs/mock_benchmark_report.md
 ```
 
+Build a local result package from the generated report and fixture CSVs:
+
+```bash
+kvoptbench result-package \
+  --summary examples/public_release/summary.csv \
+  --report reports/outputs/mock_benchmark_report.md \
+  --artifact examples/public_release/cache_summary.csv \
+  --artifact examples/public_release/prefix_sweep.csv \
+  --artifact examples/public_release/prefill_decode.csv \
+  --artifact examples/public_release/long_context.csv \
+  --artifact examples/public_release/kv_quantization.csv \
+  --artifact examples/public_release/kv_offload.csv \
+  --artifact examples/public_release/speculative_decoding.csv \
+  --artifact examples/public_release/disaggregation.csv \
+  --artifact reports/outputs/strategy_advisor.json \
+  --output-dir results/packages/mock_public_example
+```
+
+The package contains `run_manifest.json`, `missing_metrics.json`, `README_result.md`,
+artifact hashes, and copied inputs. It is local generated output and should not be committed.
+
 ## Interpreting The Example
 
 The example is intentionally a mock release artifact. Treat it as proof that the workload, comparison, reporting, and advisor pipeline is wired correctly. Do not treat mock metrics as real vLLM, SGLang, LMCache, Mooncake, or llm-d performance claims.

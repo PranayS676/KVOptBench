@@ -53,6 +53,7 @@ The project currently includes:
 - cache, prefix-overlap, prefill/decode, long-context, KV quantization, KV offload, speculative decoding, and disaggregation comparisons
 - public example bundle and report templates
 - evidence-based strategy advisor
+- reproducible result-package generation with artifact hashes, samples, provenance, and missing-metric notes
 
 Real endpoint result collection is the next major validation step.
 
@@ -108,9 +109,15 @@ kvoptbench generate-workload --profile shared_prefix --out workloads/generated/s
 kvoptbench run --config examples/example_experiment_config.yaml
 kvoptbench summarize --input results/raw --output results/summary.csv
 kvoptbench report --input results/summary.csv --output reports/mock_report.md
+kvoptbench result-package \
+  --summary results/summary.csv \
+  --raw-input results/raw \
+  --report reports/mock_report.md \
+  --config examples/example_experiment_config.yaml \
+  --output-dir results/packages/mock_smoke
 ```
 
-Generated workloads, raw results, summaries, and reports are ignored by git by default.
+Generated workloads, raw results, summaries, reports, and result packages are ignored by git by default.
 
 ## Bring Your Own Endpoint
 
@@ -147,6 +154,12 @@ kvoptbench endpoint-check --config examples/vllm_openai_compatible_config.yaml
 kvoptbench run --config examples/vllm_openai_compatible_config.yaml
 kvoptbench summarize --input results/raw --output results/summary.csv
 kvoptbench report --input results/summary.csv --output reports/real_endpoint_report.md
+kvoptbench result-package \
+  --summary results/summary.csv \
+  --raw-input results/raw \
+  --report reports/real_endpoint_report.md \
+  --config examples/vllm_openai_compatible_config.yaml \
+  --output-dir results/packages/real_endpoint_smoke
 ```
 
 ### Reasoning and Tool-Calling Models
@@ -176,6 +189,7 @@ The CLI can generate config plans and comparison CSVs for common inference-strat
 - `spec-decoding-plan`, `spec-decoding-run`, `spec-decoding-compare`
 - `disagg-plan`, `disagg-run`, `disagg-compare`
 - `strategy-recommend`
+- `result-package`
 
 Command previews document how a compatible server may be started. They do not launch servers:
 
@@ -280,7 +294,26 @@ kvoptbench report \
   --disagg-input examples/public_release/disaggregation.csv \
   --strategy-input reports/outputs/strategy_advisor.json \
   --output reports/outputs/mock_benchmark_report.md
+
+kvoptbench result-package \
+  --summary examples/public_release/summary.csv \
+  --report reports/outputs/mock_benchmark_report.md \
+  --artifact examples/public_release/cache_summary.csv \
+  --artifact examples/public_release/prefix_sweep.csv \
+  --artifact examples/public_release/prefill_decode.csv \
+  --artifact examples/public_release/long_context.csv \
+  --artifact examples/public_release/kv_quantization.csv \
+  --artifact examples/public_release/kv_offload.csv \
+  --artifact examples/public_release/speculative_decoding.csv \
+  --artifact examples/public_release/disaggregation.csv \
+  --artifact reports/outputs/strategy_advisor.json \
+  --output-dir results/packages/mock_public_example
 ```
+
+`result-package` writes `run_manifest.json`, `missing_metrics.json`, `README_result.md`,
+artifact hashes, JSONL samples when raw/workload files are provided, copied dataset manifests,
+and redacted config snapshots. Treat the generated bundle as local output until you have checked
+dataset rights, private prompt exposure, and endpoint metadata.
 
 ## Guides
 

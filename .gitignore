@@ -28,6 +28,7 @@ CODEX_PROMPT.md
 results/raw/*
 results/processed/*
 results/summaries/*
+results/packages/*
 reports/outputs/*
 workloads/generated/*
 *.jsonl
