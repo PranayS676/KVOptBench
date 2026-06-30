@@ -59,7 +59,11 @@ async def run_experiment(config_path: str | Path) -> Path:
             await asyncio.sleep(index / config.request_rate)
         async with semaphore:
             response = await client.chat(item)
-        quality = evaluate_output(response.content, item) if response.success else None
+        quality = (
+            evaluate_output(response.content, item, tool_calls=response.tool_calls)
+            if response.success
+            else None
+        )
         e2e_seconds = (response.e2e_latency_ms or 0) / 1000
         output_tps = response.output_tokens / e2e_seconds if e2e_seconds > 0 else None
         input_tps = response.input_tokens / e2e_seconds if e2e_seconds > 0 else None
@@ -79,6 +83,15 @@ async def run_experiment(config_path: str | Path) -> Path:
             request_rate=config.request_rate,
             input_tokens=response.input_tokens,
             output_tokens=response.output_tokens,
+            provider_completion_tokens=response.provider_completion_tokens,
+            reasoning_content_present=response.reasoning_content_present,
+            reasoning_tokens=response.reasoning_tokens,
+            first_reasoning_token_ms=response.first_reasoning_token_ms,
+            visible_answer_missing=response.visible_answer_missing,
+            finish_reason=response.finish_reason,
+            tool_call_count=len(response.tool_calls),
+            tool_call_names=[call.name for call in response.tool_calls if call.name],
+            tool_calls=response.tool_calls,
             target_input_tokens=item.target_input_tokens,
             target_output_tokens=item.target_output_tokens,
             shared_prefix_tokens=item.shared_prefix_tokens,
@@ -104,6 +117,11 @@ async def run_experiment(config_path: str | Path) -> Path:
                 "workload_metadata": item.metadata,
                 "endpoint_health": endpoint_health.model_dump(),
                 "quality_details": quality.details if quality else {},
+                "response_metadata": {
+                    **metadata,
+                    "finish_reason": response.finish_reason,
+                    "reasoning_content_captured": response.reasoning_content is not None,
+                },
             },
         )
 
@@ -177,6 +195,8 @@ def _missing_metrics(response, metadata: dict) -> list[str]:
         missing.append("ttft_ms")
     if response.tpot_ms is None:
         missing.append("tpot_ms")
+    if response.reasoning_content_present and response.first_reasoning_token_ms is None:
+        missing.append("first_reasoning_token_ms")
     for metric in [
         "engine_version",
         "gpu_memory_used_gb",

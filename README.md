@@ -137,6 +137,7 @@ Edit the config fields that match your server:
 - `api_key_env`, only when authentication is required
 - `workload_file`
 - `output_file`
+- `capture_reasoning_content`, optional and disabled by default
 
 Then run:
 
@@ -147,6 +148,20 @@ kvoptbench run --config examples/vllm_openai_compatible_config.yaml
 kvoptbench summarize --input results/raw --output results/summary.csv
 kvoptbench report --input results/summary.csv --output reports/real_endpoint_report.md
 ```
+
+### Reasoning and Tool-Calling Models
+
+KVOptBench is compatible with OpenAI-compatible reasoning and tool-calling responses.
+Visible answer text, reasoning telemetry, and structured tool calls are recorded as
+separate channels in the JSONL results.
+
+- `output_tokens` measures visible answer text only.
+- `provider_completion_tokens` preserves the endpoint-reported completion token count when available.
+- `reasoning_content_present`, `reasoning_tokens`, `first_reasoning_token_ms`, and
+  `visible_answer_missing` make reasoning-only outputs explicit.
+- Full `reasoning_content` is not stored unless `capture_reasoning_content: true` is set.
+- Tool-call workloads can pass OpenAI-compatible `tools` and `tool_choice` through workload metadata.
+  KVOptBench validates tool name and arguments; it does not execute external tools.
 
 ## Strategy Experiments
 

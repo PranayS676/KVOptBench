@@ -124,6 +124,7 @@ def _generate_items(
         if not expected_tool:
             exclusions.append("missing_expected_tool")
             continue
+        openai_tools = _openai_tools(tools)
         tools_text = json.dumps(tools, ensure_ascii=False, sort_keys=True)
         prompt = BFCL_TEMPLATE.format(tools=tools_text, request=request)
         measured_input_tokens = count_tokens(prompt, options.token_count_method)
@@ -140,7 +141,7 @@ def _generate_items(
                 target_output_tokens=options.target_output_tokens,
                 prefix_group_id=None,
                 shared_prefix_tokens=0,
-                eval_type="tool_calling_placeholder",
+                eval_type="tool_calling",
                 metadata={
                     "dataset": "bfcl",
                     "source": "bfcl",
@@ -153,6 +154,8 @@ def _generate_items(
                     "source_document_id": record_id,
                     "source_question_id": record_id,
                     "expected_tool": expected_tool,
+                    "openai_tools": openai_tools,
+                    "tool_choice": "auto",
                     "tool_count": len(tools),
                     "prefix_hash": sha256_text(tools_text),
                     "prompt_hash": sha256_text(prompt),
@@ -174,8 +177,8 @@ def _generate_items(
                     "truncation_policy": "none",
                     "excluded_reason": None,
                     "answer_type": "tool_name",
-                    "evaluator": "tool_calling_placeholder",
-                    "evaluator_version": "0.1.0",
+                    "evaluator": "tool_calling",
+                    "evaluator_version": "0.2.0",
                     "redistributable_prompt": False,
                     "redistributable_output": False,
                     "rights_note": "Use upstream BFCL dataset terms and attribution.",
@@ -297,6 +300,28 @@ def _tools(record: dict[str, Any]) -> list[dict[str, Any]]:
     if isinstance(value, list):
         return [dict(item) if isinstance(item, dict) else {"name": str(item)} for item in value]
     return []
+
+
+def _openai_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for tool in tools:
+        if tool.get("type") == "function" and isinstance(tool.get("function"), dict):
+            normalized.append(tool)
+            continue
+        name = tool.get("name") or tool.get("function_name") or tool.get("tool")
+        if not name:
+            continue
+        parameters = tool.get("parameters")
+        if not isinstance(parameters, dict):
+            parameters = {"type": "object", "properties": {}}
+        function: dict[str, Any] = {
+            "name": str(name),
+            "parameters": parameters,
+        }
+        if tool.get("description"):
+            function["description"] = str(tool["description"])
+        normalized.append({"type": "function", "function": function})
+    return normalized
 
 
 def _expected_tool(record: dict[str, Any]) -> str | None:

@@ -40,6 +40,8 @@ class ExperimentConfig(BaseModel):
     retries: int = Field(default=0, ge=0)
     retry_backoff_seconds: float = Field(default=0.25, ge=0)
     capture_response_headers: bool = False
+    capture_reasoning_content: bool = False
+    capture_tool_calls: bool = True
     stream: bool = True
     endpoint_metadata: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -89,12 +91,32 @@ class QualityResult(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
+class ToolCallRecord(BaseModel):
+    """Structured tool-call output captured from OpenAI-compatible responses."""
+
+    id: str | None = None
+    type: str = "function"
+    name: str | None = None
+    arguments: dict[str, Any] | list[Any] | str | None = None
+    arguments_json: str | None = None
+    arguments_parse_error: str | None = None
+    index: int | None = None
+
+
 class TimedResponse(BaseModel):
     """OpenAI-compatible client response with timing measurements."""
 
     content: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
+    provider_completion_tokens: int | None = None
+    reasoning_content: str | None = None
+    reasoning_content_present: bool = False
+    reasoning_tokens: int | None = None
+    first_reasoning_token_ms: float | None = None
+    visible_answer_missing: bool = False
+    finish_reason: str | None = None
+    tool_calls: list[ToolCallRecord] = Field(default_factory=list)
     token_count_method: str = "char_approx_4"
     ttft_ms: float | None = None
     tpot_ms: float | None = None
@@ -186,6 +208,15 @@ class RequestResult(BaseModel):
     request_rate: float | None = None
     input_tokens: int = 0
     output_tokens: int = 0
+    provider_completion_tokens: int | None = None
+    reasoning_content_present: bool = False
+    reasoning_tokens: int | None = None
+    first_reasoning_token_ms: float | None = None
+    visible_answer_missing: bool = False
+    finish_reason: str | None = None
+    tool_call_count: int = 0
+    tool_call_names: list[str] = Field(default_factory=list)
+    tool_calls: list[ToolCallRecord] = Field(default_factory=list)
     target_input_tokens: int = 0
     target_output_tokens: int = 0
     shared_prefix_tokens: int = 0
