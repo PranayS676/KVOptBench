@@ -61,6 +61,10 @@ def summarize_results(input_path: str | Path, output_path: str | Path) -> Path:
             "requests_per_second",
             "input_tokens_per_second",
             "output_tokens_per_second",
+            "provider_completion_tokens",
+            "reasoning_tokens",
+            "first_reasoning_token_ms",
+            "tool_call_count",
             "quality_score",
             "cache_hit_rate",
             "cache_miss_penalty_ms",
@@ -74,6 +78,13 @@ def summarize_results(input_path: str | Path, output_path: str | Path) -> Path:
                 summary[f"{col}_mean"] = None
                 summary[f"{col}_p50"] = None
                 summary[f"{col}_p95"] = None
+
+        for col in ["reasoning_content_present", "visible_answer_missing"]:
+            if col in group:
+                values = group[col].fillna(False).astype(bool)
+                summary[f"{col}_rate"] = round(float(values.mean()), 4)
+            else:
+                summary[f"{col}_rate"] = None
 
         missing: set[str] = set()
         for value in group.get("missing_metrics", []):

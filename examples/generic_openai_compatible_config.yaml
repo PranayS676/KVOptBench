@@ -19,6 +19,8 @@ request_timeout_seconds: 120
 retries: 2
 retry_backoff_seconds: 0.5
 capture_response_headers: true
+capture_reasoning_content: false
+capture_tool_calls: true
 stream: true
 endpoint_metadata:
   note: Generic OpenAI-compatible endpoint. Set api_key_env to null if auth is not required.

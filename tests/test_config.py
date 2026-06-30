@@ -39,6 +39,8 @@ def test_load_config_validates_yaml(tmp_path: Path) -> None:
     assert config.provider == "mock"
     assert config.concurrency == 2
     assert config.workload_file == Path("workloads/generated/test.jsonl")
+    assert config.capture_reasoning_content is False
+    assert config.capture_tool_calls is True
 
 
 def test_load_config_rejects_missing_required_field(tmp_path: Path) -> None:
@@ -70,6 +72,8 @@ def test_load_config_supports_real_endpoint_fields(tmp_path: Path) -> None:
                 "retry_backoff_seconds: 0.25",
                 "request_timeout_seconds: 30",
                 "capture_response_headers: true",
+                "capture_reasoning_content: true",
+                "capture_tool_calls: false",
                 "endpoint_metadata:",
                 "  deployment: local-vllm",
             ]
@@ -84,6 +88,8 @@ def test_load_config_supports_real_endpoint_fields(tmp_path: Path) -> None:
     assert config.retry_backoff_seconds == 0.25
     assert config.request_timeout_seconds == 30
     assert config.capture_response_headers is True
+    assert config.capture_reasoning_content is True
+    assert config.capture_tool_calls is False
     assert config.endpoint_metadata["deployment"] == "local-vllm"
 
 

@@ -97,6 +97,140 @@ def test_non_streaming_chat_retries_transient_status() -> None:
     assert calls["count"] == 2
 
 
+def test_non_streaming_chat_captures_reasoning_metadata_without_storing_trace() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": "",
+                            "reasoning_content": "I should compute this before answering.",
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 5,
+                    "completion_tokens": 7,
+                    "completion_tokens_details": {"reasoning_tokens": 7},
+                    "total_tokens": 12,
+                },
+            },
+        )
+
+    client = OpenAICompatClient(_config(), transport=httpx.MockTransport(handler))
+
+    response = asyncio.run(client.chat(_item()))
+
+    assert response.success is True
+    assert response.content == ""
+    assert response.output_tokens == 0
+    assert response.provider_completion_tokens == 7
+    assert response.reasoning_content_present is True
+    assert response.reasoning_content is None
+    assert response.reasoning_tokens == 7
+    assert response.visible_answer_missing is True
+    assert response.finish_reason == "stop"
+
+
+def test_non_streaming_chat_can_opt_in_to_capture_reasoning_content() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": "endpoint-ok",
+                            "reasoning_content": "Short local reasoning trace.",
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 4, "total_tokens": 9},
+            },
+        )
+
+    client = OpenAICompatClient(
+        _config(capture_reasoning_content=True),
+        transport=httpx.MockTransport(handler),
+    )
+
+    response = asyncio.run(client.chat(_item()))
+
+    assert response.content == "endpoint-ok"
+    assert response.reasoning_content_present is True
+    assert response.reasoning_content == "Short local reasoning trace."
+    assert response.visible_answer_missing is False
+
+
+def test_non_streaming_chat_sends_configured_tools_and_parses_tool_calls() -> None:
+    item = _item().model_copy(
+        update={
+            "eval_type": "tool_calling",
+            "metadata": {
+                "openai_tools": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "lookup_order",
+                            "description": "Look up an order.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {"order_id": {"type": "string"}},
+                                "required": ["order_id"],
+                            },
+                        },
+                    }
+                ],
+                "tool_choice": "auto",
+            },
+        }
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        assert payload["tools"][0]["function"]["name"] == "lookup_order"
+        assert payload["tool_choice"] == "auto"
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "call_1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "lookup_order",
+                                        "arguments": '{"order_id": "A123"}',
+                                    },
+                                }
+                            ],
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8},
+            },
+        )
+
+    client = OpenAICompatClient(_config(), transport=httpx.MockTransport(handler))
+
+    response = asyncio.run(client.chat(item))
+
+    assert response.content == ""
+    assert response.finish_reason == "tool_calls"
+    assert response.tool_calls[0].name == "lookup_order"
+    assert response.tool_calls[0].arguments == {"order_id": "A123"}
+    assert response.tool_calls[0].arguments_json == '{"order_id": "A123"}'
+    assert response.visible_answer_missing is False
+
+
 def test_streaming_chat_parses_openai_sse_chunks() -> None:
     first = {
         "choices": [{"delta": {"content": "endpoint"}, "finish_reason": None}],
@@ -124,3 +258,91 @@ def test_streaming_chat_parses_openai_sse_chunks() -> None:
     assert response.content == "endpoint-ok"
     assert response.ttft_ms is not None
     assert response.response_metadata["retry_count"] == 0
+
+
+def test_streaming_chat_captures_reasoning_timing_without_visible_ttft() -> None:
+    first = {
+        "choices": [{"delta": {"reasoning_content": "thinking"}, "finish_reason": None}],
+    }
+    second = {
+        "choices": [{"delta": {"reasoning_content": " more"}, "finish_reason": None}],
+    }
+    done = {
+        "choices": [{"delta": {}, "finish_reason": "stop"}],
+    }
+    content = (
+        f"data: {json.dumps(first)}\n\n"
+        f"data: {json.dumps(second)}\n\n"
+        f"data: {json.dumps(done)}\n\n"
+        "data: [DONE]\n\n"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=content, headers={"content-type": "text/event-stream"})
+
+    client = OpenAICompatClient(_config(stream=True), transport=httpx.MockTransport(handler))
+
+    response = asyncio.run(client.chat(_item()))
+
+    assert response.success is True
+    assert response.content == ""
+    assert response.output_tokens == 0
+    assert response.ttft_ms is None
+    assert response.first_reasoning_token_ms is not None
+    assert response.reasoning_content_present is True
+    assert response.reasoning_content is None
+    assert response.reasoning_tokens > 0
+    assert response.visible_answer_missing is True
+    assert response.finish_reason == "stop"
+
+
+def test_streaming_chat_reassembles_tool_call_fragments() -> None:
+    first = {
+        "choices": [
+            {
+                "delta": {
+                    "tool_calls": [
+                        {
+                            "index": 0,
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "lookup_order", "arguments": '{"order_id"'},
+                        }
+                    ]
+                },
+                "finish_reason": None,
+            }
+        ],
+    }
+    second = {
+        "choices": [
+            {
+                "delta": {
+                    "tool_calls": [
+                        {"index": 0, "function": {"arguments": ': "A123"}'}}
+                    ]
+                },
+                "finish_reason": None,
+            }
+        ],
+    }
+    done = {"choices": [{"delta": {}, "finish_reason": "tool_calls"}]}
+    content = (
+        f"data: {json.dumps(first)}\n\n"
+        f"data: {json.dumps(second)}\n\n"
+        f"data: {json.dumps(done)}\n\n"
+        "data: [DONE]\n\n"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=content, headers={"content-type": "text/event-stream"})
+
+    client = OpenAICompatClient(_config(stream=True), transport=httpx.MockTransport(handler))
+
+    response = asyncio.run(client.chat(_item()))
+
+    assert response.content == ""
+    assert response.visible_answer_missing is False
+    assert response.finish_reason == "tool_calls"
+    assert response.tool_calls[0].name == "lookup_order"
+    assert response.tool_calls[0].arguments == {"order_id": "A123"}

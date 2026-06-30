@@ -140,6 +140,36 @@ def generate_report(
     lines.extend(
         [
             "",
+            "## Reasoning & Tool Calls",
+            "",
+            "| workload | reasoning output rate | visible answer missing rate | "
+            "mean reasoning tokens | p50 first reasoning token ms | tool calls/request |",
+            "|---|---:|---:|---:|---:|---:|",
+        ]
+    )
+    reasoning_cols = {
+        "reasoning_content_present_rate",
+        "visible_answer_missing_rate",
+        "reasoning_tokens_mean",
+        "first_reasoning_token_ms_p50",
+        "tool_call_count_mean",
+    }
+    if reasoning_cols.intersection(frame.columns):
+        for _, row in frame.iterrows():
+            lines.append(
+                f"| {row.get('workload', 'unknown')} | "
+                f"{_fmt(row.get('reasoning_content_present_rate'))} | "
+                f"{_fmt(row.get('visible_answer_missing_rate'))} | "
+                f"{_fmt(row.get('reasoning_tokens_mean'))} | "
+                f"{_fmt(row.get('first_reasoning_token_ms_p50'))} | "
+                f"{_fmt(row.get('tool_call_count_mean'))} |"
+            )
+    else:
+        lines.append("| n/a | n/a | n/a | n/a | n/a | n/a |")
+
+    lines.extend(
+        [
+            "",
             "## Cache Summary",
             "",
             "| workload | strategy | cache hit rate | cache miss penalty ms |",

@@ -53,6 +53,46 @@ def test_report_generator_creates_required_sections(tmp_path: Path) -> None:
     assert "Milestone" not in report
 
 
+def test_report_generator_includes_reasoning_and_tool_call_summary(tmp_path: Path) -> None:
+    summary = tmp_path / "summary.csv"
+    output = tmp_path / "report.md"
+    pd.DataFrame(
+        [
+            {
+                "experiment_id": "exp",
+                "provider": "local",
+                "engine": "openai_compatible",
+                "model_id": "reasoning-model",
+                "strategy": "baseline",
+                "workload": "tool_calling",
+                "concurrency": 1,
+                "requests": 2,
+                "success_rate": 1.0,
+                "ttft_ms_p50": None,
+                "ttft_ms_p95": None,
+                "e2e_latency_ms_p50": 200.0,
+                "e2e_latency_ms_p95": 240.0,
+                "output_tokens_per_second_mean": 0.0,
+                "quality_score_mean": 0.5,
+                "reasoning_content_present_rate": 1.0,
+                "visible_answer_missing_rate": 0.5,
+                "reasoning_tokens_mean": 12.0,
+                "first_reasoning_token_ms_p50": 80.0,
+                "tool_call_count_mean": 1.0,
+                "missing_metrics": "ttft_ms",
+            }
+        ]
+    ).to_csv(summary, index=False)
+
+    generate_report(input_path=summary, output_path=output)
+
+    report = output.read_text(encoding="utf-8")
+    assert "## Reasoning & Tool Calls" in report
+    assert "reasoning output rate" in report
+    assert "visible answer missing rate" in report
+    assert "tool calls/request" in report
+
+
 def test_report_generator_includes_optional_cache_comparison(tmp_path: Path) -> None:
     summary = tmp_path / "summary.csv"
     cache_summary = tmp_path / "cache_summary.csv"
