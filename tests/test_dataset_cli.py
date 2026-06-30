@@ -79,6 +79,41 @@ def test_dataset_prepare_cli_writes_gutenberg_workload_and_manifest(tmp_path: Pa
     assert json.loads(manifest.read_text(encoding="utf-8"))["adapter_name"] == "gutenberg"
 
 
+def test_dataset_prepare_cli_writes_longbench_workload_with_subset(tmp_path: Path) -> None:
+    runner = CliRunner()
+    out = tmp_path / "longbench.jsonl"
+    manifest = tmp_path / "longbench_manifest.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "dataset",
+            "prepare",
+            "--source",
+            "longbench",
+            "--mode",
+            "long_context_qa",
+            "--source-path",
+            "tests/fixtures/datasets/longbench_tiny.json",
+            "--subset",
+            "qasper",
+            "--out",
+            str(out),
+            "--manifest",
+            str(manifest),
+            "--target-input-tokens",
+            "256",
+            "--target-output-tokens",
+            "64",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Wrote 1 dataset workload rows" in result.stdout
+    assert len(load_workload(out)) == 1
+    assert json.loads(manifest.read_text(encoding="utf-8"))["adapter_name"] == "longbench"
+
+
 def test_dataset_prepare_cli_rejects_unknown_source(tmp_path: Path) -> None:
     runner = CliRunner()
 

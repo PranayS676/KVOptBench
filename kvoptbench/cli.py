@@ -87,6 +87,10 @@ def dataset_prepare_command(
     context_buckets: str | None = typer.Option(None, "--context-buckets"),
     book_ids: str | None = typer.Option(None, "--book-ids"),
     download: bool = typer.Option(False, "--download"),
+    cache_dir: Path | None = typer.Option(None, "--cache-dir"),
+    dataset_revision: str | None = typer.Option(None, "--dataset-revision"),
+    subset: str | None = typer.Option(None, "--subset"),
+    force: bool = typer.Option(False, "--force"),
     tokenizer_id: str | None = typer.Option(None, "--tokenizer-id"),
     tokenizer_revision: str | None = typer.Option(None, "--tokenizer-revision"),
 ) -> None:
@@ -111,6 +115,10 @@ def dataset_prepare_command(
                 context_buckets=_parse_context_buckets(context_buckets) or (),
                 book_ids=_parse_csv_strings(book_ids),
                 download=download,
+                cache_dir=cache_dir,
+                dataset_revision=dataset_revision,
+                subset=_parse_csv_strings(subset),
+                force=force,
                 tokenizer_id=tokenizer_id,
                 tokenizer_revision=tokenizer_revision,
             )

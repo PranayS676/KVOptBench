@@ -48,10 +48,18 @@ def test_dataset_prepare_options_parse_context_and_book_ids(tmp_path: Path) -> N
         manifest=tmp_path / "manifest.json",
         context_buckets=(128, 256),
         book_ids=("1342", "84"),
+        cache_dir=tmp_path / "cache",
+        dataset_revision="abc123",
+        subset=("qasper",),
+        force=True,
     )
 
     assert options.context_buckets == (128, 256)
     assert options.book_ids == ("1342", "84")
+    assert options.cache_dir == tmp_path / "cache"
+    assert options.dataset_revision == "abc123"
+    assert options.subset == ("qasper",)
+    assert options.force is True
 
 
 def test_manifest_json_is_serializable(tmp_path: Path) -> None:

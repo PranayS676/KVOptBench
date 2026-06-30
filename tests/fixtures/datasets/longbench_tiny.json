@@ -1,0 +1,23 @@
+[
+  {
+    "id": "lb-qasper-1",
+    "dataset": "qasper",
+    "context": "The paper evaluates cache-aware LLM inference. It reports that prefix reuse can reduce time to first token.",
+    "input": "What can prefix reuse reduce?",
+    "answers": ["time to first token"]
+  },
+  {
+    "id": "lb-retrieval-1",
+    "dataset": "passage_retrieval_en",
+    "context": "Passage source-lb-7 is the relevant evidence for the retrieval request.",
+    "input": "Which passage is relevant?",
+    "answers": ["source-lb-7"]
+  },
+  {
+    "id": "lb-code-1",
+    "dataset": "repobench-p",
+    "context": "def load_config(path):\n    return parse_yaml(path)\n\ndef run():\n    return load_config('config.yaml')",
+    "input": "Which function reads the configuration?",
+    "answers": ["load_config"]
+  }
+]

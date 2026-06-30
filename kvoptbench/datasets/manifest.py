@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import subprocess
 import sys
 from collections import Counter
@@ -46,6 +47,10 @@ class DatasetPrepareOptions(BaseModel):
     context_buckets: tuple[int, ...] = ()
     book_ids: tuple[str, ...] = ()
     download: bool = False
+    cache_dir: Path | None = None
+    dataset_revision: str | None = None
+    subset: tuple[str, ...] = ()
+    force: bool = False
     tokenizer_id: str | None = None
     tokenizer_revision: str | None = None
     token_count_method: str = "char_approx_4"
@@ -93,6 +98,10 @@ class DatasetManifest(BaseModel):
     source_url: str
     dataset_revision: str | None = None
     source_revision: str | None = None
+    cache_dir: str | None = None
+    cache_path: str | None = None
+    download_method: str | None = None
+    downloaded_at: str | None = None
     split: str | None = None
     license: str | None = None
     rights_note: str | None = None
@@ -175,6 +184,11 @@ def build_manifest(
     generation_finished_at: str | None = None,
     generation_duration_sec: float | None = None,
     known_limitations: list[str] | None = None,
+    cache_path: str | Path | None = None,
+    download_method: str | None = None,
+    downloaded_at: str | None = None,
+    source_url: str | None = None,
+    source_revision: str | None = None,
 ) -> DatasetManifest:
     """Construct a manifest from generated workload rows."""
     excluded_reasons = excluded_reasons or []
@@ -203,7 +217,13 @@ def build_manifest(
         dataset_name=info.dataset_name,
         dataset=info.name,
         dataset_source_url=info.source_url,
-        source_url=info.source_url,
+        source_url=source_url or info.source_url,
+        dataset_revision=options.dataset_revision,
+        source_revision=source_revision or options.dataset_revision,
+        cache_dir=str(options.cache_dir) if options.cache_dir is not None else None,
+        cache_path=str(cache_path) if cache_path is not None else None,
+        download_method=download_method,
+        downloaded_at=downloaded_at,
         split=options.split,
         license=info.license,
         rights_note=rights_note or info.rights_note,
@@ -257,6 +277,16 @@ def generation_command(options: DatasetPrepareOptions) -> str:
     ]
     if options.source_path is not None:
         parts.append(f"--source-path {options.source_path}")
+    if options.download:
+        parts.append("--download")
+    if options.cache_dir is not None:
+        parts.append(f"--cache-dir {options.cache_dir}")
+    if options.dataset_revision:
+        parts.append(f"--dataset-revision {options.dataset_revision}")
+    if options.subset:
+        parts.append("--subset " + ",".join(options.subset))
+    if options.force:
+        parts.append("--force")
     if options.split:
         parts.append(f"--split {options.split}")
     if options.max_items:
@@ -265,6 +295,10 @@ def generation_command(options: DatasetPrepareOptions) -> str:
         parts.append("--context-buckets " + ",".join(str(value) for value in options.context_buckets))
     if options.book_ids:
         parts.append("--book-ids " + ",".join(options.book_ids))
+    if options.tokenizer_id:
+        parts.append(f"--tokenizer-id {options.tokenizer_id}")
+    if options.tokenizer_revision:
+        parts.append(f"--tokenizer-revision {options.tokenizer_revision}")
     parts.extend(
         [
             f"--target-input-tokens {options.target_input_tokens}",
@@ -276,10 +310,23 @@ def generation_command(options: DatasetPrepareOptions) -> str:
 
 
 def source_hash(path: Path | None) -> str | None:
-    """Hash a source file when one concrete source file was provided."""
-    if path is None or not path.exists() or path.is_dir():
+    """Hash a source file or directory when one concrete source was provided."""
+    if path is None or not path.exists():
         return None
+    if path.is_dir():
+        return _source_tree_hash(path)
     return sha256_file(path)
+
+
+def _source_tree_hash(path: Path) -> str:
+    digest = hashlib.sha256()
+    for child in sorted(candidate for candidate in path.rglob("*") if candidate.is_file()):
+        relative = child.relative_to(path).as_posix()
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(sha256_file(child).encode("utf-8"))
+        digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def _manifest_truncation_policy(items: list[WorkloadItem]) -> str:

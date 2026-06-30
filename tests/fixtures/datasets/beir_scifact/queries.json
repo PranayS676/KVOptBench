@@ -1,0 +1,10 @@
+[
+  {
+    "_id": "q-1",
+    "text": "Prefix cache reuse can lower time to first token."
+  },
+  {
+    "_id": "q-2",
+    "text": "Decode-heavy requests depend on per-token generation latency."
+  }
+]

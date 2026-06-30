@@ -3,13 +3,22 @@
 from __future__ import annotations
 
 from kvoptbench.datasets.base import DatasetAdapter
+from kvoptbench.datasets.beir import BeirScifactAdapter
+from kvoptbench.datasets.bfcl import BfclAdapter
 from kvoptbench.datasets.gutenberg import GutenbergAdapter
+from kvoptbench.datasets.longbench import LongBenchAdapter
 from kvoptbench.datasets.manifest import DatasetAdapterInfo
 from kvoptbench.datasets.qasper import QasperAdapter
 
 
 def _adapters() -> dict[str, DatasetAdapter]:
-    adapters: list[DatasetAdapter] = [QasperAdapter(), GutenbergAdapter()]
+    adapters: list[DatasetAdapter] = [
+        QasperAdapter(),
+        GutenbergAdapter(),
+        LongBenchAdapter(),
+        BeirScifactAdapter(),
+        BfclAdapter(),
+    ]
     return {adapter.info.name: adapter for adapter in adapters}
 
 

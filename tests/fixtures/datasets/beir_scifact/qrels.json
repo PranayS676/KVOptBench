@@ -1,0 +1,12 @@
+[
+  {
+    "query_id": "q-1",
+    "doc_id": "doc-1",
+    "score": 1
+  },
+  {
+    "query_id": "q-2",
+    "doc_id": "doc-2",
+    "score": 1
+  }
+]
