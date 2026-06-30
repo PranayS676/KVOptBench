@@ -45,6 +45,7 @@ The project currently includes:
 - YAML-driven experiment runner
 - streaming and non-streaming timing capture
 - workload generators for cache, long-context, decode-heavy, RAG, tool-calling, and agentic patterns
+- public dataset adapters for QASPER, Project Gutenberg, LongBench, BEIR SciFact, and BFCL
 - vLLM and SGLang command previews
 - real endpoint health checks and runner support
 - cache, prefix-overlap, prefill/decode, long-context, KV quantization, KV offload, speculative decoding, and disaggregation comparisons
@@ -52,6 +53,10 @@ The project currently includes:
 - evidence-based strategy advisor
 
 Real endpoint result collection is the next major validation step.
+
+Public dataset preparation is documented separately from synthetic workload generation.
+For real frontier-model testing, use the dataset guide, adapter contract, and generated
+manifests before publishing cache, long-context, RAG, or tool-calling claims.
 
 ## Install
 
@@ -62,6 +67,13 @@ python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
+Install optional dataset download dependencies when using Hugging Face-backed public
+datasets:
+
+```bash
+python -m pip install -e ".[dev,data]"
+```
+
 On Windows PowerShell:
 
 ```powershell
@@ -69,6 +81,12 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
 python -m pytest
+```
+
+For public dataset downloads on Windows PowerShell:
+
+```powershell
+python -m pip install -e ".[dev,data]"
 ```
 
 ## Local Mock Quickstart
@@ -152,6 +170,65 @@ kvoptbench engine-command --engine sglang --strategy cache_off --model-id your/m
 For official real endpoint results, record the exact backend command, engine version, model revision,
 GPU type, workload hash, config hash, and `missing_metrics`.
 
+## Real/Public Dataset Packs
+
+Synthetic generators are useful for smoke tests, but credible public results should use
+documented public datasets with manifests and workload hashes.
+
+Start here:
+
+- `guides/datasets.md`: recommended public datasets and what each validates
+- `guides/dataset_adapter_contract.md`: implemented adapter CLI, JSONL schema, and manifest contract
+- `guides/frontier_dataset_pack.md`: first self-hosted frontier testing pack
+
+The recommended first public run uses QASPER shared-prefix and random-prefix controls at
+8K and 32K against one self-hosted vLLM or SGLang endpoint. Project Gutenberg, LongBench,
+BEIR SciFact, and BFCL are available when you want to expand into long-context pressure,
+RAG, and tool-calling experiments.
+
+Prepare a QASPER workload from an existing local source file:
+
+```bash
+kvoptbench dataset prepare \
+  --source qasper \
+  --mode shared_prefix \
+  --split validation \
+  --source-path tests/fixtures/datasets/qasper_tiny.json \
+  --target-input-tokens 8192 \
+  --target-output-tokens 256 \
+  --out workloads/generated/qasper_shared_prefix_8k.jsonl \
+  --manifest workloads/generated/qasper_shared_prefix_8k_manifest.json
+```
+
+Allow the adapter to download and cache public source data explicitly:
+
+```bash
+kvoptbench dataset prepare \
+  --source qasper \
+  --mode shared_prefix \
+  --download \
+  --cache-dir data/raw \
+  --split validation \
+  --max-items 100 \
+  --target-input-tokens 32768 \
+  --target-output-tokens 256 \
+  --out workloads/generated/qasper_shared_prefix_32k.jsonl \
+  --manifest workloads/generated/qasper_shared_prefix_32k_manifest.json
+```
+
+Other implemented dataset adapters use the same command shape:
+
+```bash
+kvoptbench dataset prepare --source gutenberg --mode needle --download --book-ids 1342,84,2701 --context-buckets 8192,32768 --out workloads/generated/gutenberg_needle.jsonl --manifest workloads/generated/gutenberg_needle_manifest.json
+kvoptbench dataset prepare --source longbench --mode long_context_qa --download --subset qasper,multifieldqa_en --max-items 100 --out workloads/generated/longbench_core.jsonl --manifest workloads/generated/longbench_core_manifest.json
+kvoptbench dataset prepare --source beir_scifact --mode rag --download --max-items 100 --out workloads/generated/beir_scifact_rag.jsonl --manifest workloads/generated/beir_scifact_rag_manifest.json
+kvoptbench dataset prepare --source bfcl --mode tool_calling --download --subset BFCL_v3_simple --max-items 100 --out workloads/generated/bfcl_tool_calling.jsonl --manifest workloads/generated/bfcl_tool_calling_manifest.json
+```
+
+Generated workloads and cached raw datasets stay out of git by default. Commit adapter
+code, tiny fixtures, manifests for examples when appropriate, and result templates, not
+large raw downloads.
+
 ## Public Example Bundle
 
 `examples/public_release/` contains deterministic fixture CSVs, a mock report, and strategy-advisor
@@ -194,6 +271,9 @@ kvoptbench report \
 - `guides/real_endpoint_vllm_sglang.md`
 - `guides/runpod.md`
 - `guides/first_real_benchmark.md`
+- `guides/datasets.md`
+- `guides/dataset_adapter_contract.md`
+- `guides/frontier_dataset_pack.md`
 - `examples/public_release/result_template.md`
 - `examples/public_release/blog_report_template.md`
 

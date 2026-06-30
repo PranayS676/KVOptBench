@@ -125,6 +125,9 @@ def test_public_release_guides_document_real_endpoint_and_runpod_workflows() -> 
     assert "guides/real_endpoint_vllm_sglang.md" in readme_text
     assert "guides/runpod.md" in readme_text
     assert "guides/first_real_benchmark.md" in readme_text
+    assert "guides/datasets.md" in readme_text
+    assert "guides/dataset_adapter_contract.md" in readme_text
+    assert "guides/frontier_dataset_pack.md" in readme_text
     assert "Lambda Cloud" in readme_text
 
     public_text = "\n".join([real_text, runpod_text])
@@ -150,6 +153,20 @@ def test_public_release_templates_have_required_publication_sections() -> None:
         "missing_metrics",
         "Model Revision",
         "Workload Hash",
+        "Workload sample",
+        "Dataset source URL",
+        "License review status",
+        "Redistribution policy",
+        "Dataset adapter version",
+        "Dataset manifest hash",
+        "Prompt template hash",
+        "Tokenizer id",
+        "Token count method",
+        "Run manifest JSON",
+        "Missing metrics JSON",
+        "Known limitations",
+        "Engine-reported cache hit rate",
+        "Cache hit proxy",
     ]:
         assert required in result_text
 
@@ -181,6 +198,9 @@ def test_public_readiness_files_do_not_expose_internal_placeholders() -> None:
         Path("guides/real_endpoint_vllm_sglang.md"),
         Path("guides/runpod.md"),
         Path("guides/first_real_benchmark.md"),
+        Path("guides/datasets.md"),
+        Path("guides/dataset_adapter_contract.md"),
+        Path("guides/frontier_dataset_pack.md"),
     ]
     combined = "\n".join(path.read_text(encoding="utf-8") for path in checked_files)
 
@@ -189,3 +209,101 @@ def test_public_readiness_files_do_not_expose_internal_placeholders() -> None:
     assert "C:\\Users" not in combined
     assert "OneDrive" not in combined
     assert "https://github.com/PranayS676/KVOptBench" in combined
+
+
+def test_dataset_docs_define_public_workload_pack_and_adapter_contract() -> None:
+    datasets = Path("guides/datasets.md").read_text(encoding="utf-8")
+    contract = Path("guides/dataset_adapter_contract.md").read_text(encoding="utf-8")
+    frontier_pack = Path("guides/frontier_dataset_pack.md").read_text(encoding="utf-8")
+
+    for required_source in [
+        "QASPER",
+        "https://huggingface.co/datasets/allenai/qasper",
+        "Project Gutenberg",
+        "https://www.gutenberg.org/",
+        "LongBench",
+        "https://huggingface.co/datasets/zai-org/LongBench",
+        "BEIR",
+        "https://github.com/beir-cellar/beir",
+        "beir_scifact",
+        "Natural Questions",
+        "https://github.com/google-research-datasets/natural-questions",
+        "SWE-bench",
+        "CodeSearchNet",
+        "BFCL",
+        "bfcl: tool_calling",
+    ]:
+        assert required_source in datasets
+
+    for required_field in [
+        "CLI Usage",
+        "--download",
+        "--cache-dir",
+        "--dataset-revision",
+        "--subset",
+        "--force",
+        "qasper.py",
+        "gutenberg.py",
+        "longbench.py",
+        "beir.py",
+        "bfcl.py",
+        "KVOPTBENCH_DATASET_DOWNLOAD",
+        "dataset_source_url",
+        "source_license",
+        "prefix_group_id",
+        "shared_prefix_tokens",
+        "prefix_hash",
+        "prompt_hash",
+        "tokenizer_id",
+        "tokenizer_revision",
+        "measured_input_tokens",
+        "measured_shared_prefix_tokens",
+        "truncation_policy",
+        "redistributable_prompt",
+        "license_review_status",
+        "redistribution_policy",
+        "kvoptbench_version",
+        "git_commit",
+        "prompt_template_hash",
+        "workload_sha256",
+        "generation_command",
+        "prompt_template",
+        "engine_reported_cache_hit_rate",
+        "cache_hit_proxy",
+        "Comparability Rules",
+    ]:
+        assert required_field in contract
+
+    for required_workload in [
+        "qasper_shared_prefix_8k.jsonl",
+        "qasper_shared_prefix_32k.jsonl",
+        "qasper_random_prefix_8k.jsonl",
+        "qasper_random_prefix_32k.jsonl",
+        "QASPER prefix overlap sweep",
+        "gutenberg_needle_8k_128k.jsonl",
+        "LongBench Core Subset",
+        "Small Public RAG Pack",
+        "BFCL Tool-Calling Pack",
+        "one self-hosted vLLM or SGLang endpoint",
+        "50-100 shared-prefix",
+        "README_result.md",
+        "run_manifest.json",
+        "dataset_manifest_shared.json",
+        "missing_metrics.json",
+        "Direct comparison is not credible",
+    ]:
+        assert required_workload in frontier_pack
+
+    for required_dataset_guidance in [
+        "Implemented adapters",
+        "qasper: shared_prefix, random_prefix, partial_prefix_sweep",
+        "gutenberg: needle, no_needle_control, multi_needle, conflicting_needle",
+        "longbench: long_context_qa, long_context_retrieval, code_context",
+        "partial-prefix sweep",
+        "0%, 25%, 50%, 75%, and 90%",
+        "engine_reported_cache_hit_rate",
+        "cache_hit_proxy",
+        "redistribution policy",
+        "license review status",
+    ]:
+        assert required_dataset_guidance in datasets
