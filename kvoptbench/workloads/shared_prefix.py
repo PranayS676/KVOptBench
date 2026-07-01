@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from kvoptbench.workloads.common import filler_words, make_item
+from kvoptbench.workloads.common import filler_words, lifecycle_metadata, make_item
 
 
 def generate(count: int, target_input_tokens: int, target_output_tokens: int):
@@ -29,6 +29,15 @@ def generate(count: int, target_input_tokens: int, target_output_tokens: int):
                 prefix_group_id="shared_doc_001",
                 shared_prefix_tokens=shared_prefix_tokens,
                 eval_type="contains_expected",
+                metadata=lifecycle_metadata(
+                    lifecycle_pattern="retrieval",
+                    workload_profile="long_context_qa",
+                    request_group_id="shared_doc_001",
+                    reuse_hint="shared_prefix",
+                    required_evaluators=["answer_correctness", "factuality"],
+                    required_metrics=["input_tokens", "output_tokens", "latency_ms"],
+                    recommended_metrics=["cache_hit_rate", "cache_load_ms"],
+                ),
             )
         )
     return items

@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import statistics
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+NORMAL_95_Z = 1.96
 
 
 def _jsonl_files(input_path: Path) -> list[Path]:
@@ -69,15 +73,17 @@ def summarize_results(input_path: str | Path, output_path: str | Path) -> Path:
             "cache_hit_rate",
             "cache_miss_penalty_ms",
         ]:
-            values = pd.to_numeric(group.get(col), errors="coerce")
-            if values.notna().any():
-                summary[f"{col}_mean"] = round(float(values.mean()), 3)
-                summary[f"{col}_p50"] = round(float(values.quantile(0.50)), 3)
-                summary[f"{col}_p95"] = round(float(values.quantile(0.95)), 3)
-            else:
-                summary[f"{col}_mean"] = None
-                summary[f"{col}_p50"] = None
-                summary[f"{col}_p95"] = None
+            raw_values = group[col] if col in group else pd.Series(dtype="float64")
+            values = pd.to_numeric(raw_values, errors="coerce")
+            stats = _numeric_stats(values)
+            summary[f"{col}_mean"] = stats["mean"]
+            summary[f"{col}_p50"] = stats["p50"]
+            summary[f"{col}_p95"] = stats["p95"]
+            summary[f"{col}_count"] = stats["count"]
+            summary[f"{col}_std"] = stats["std"]
+            summary[f"{col}_ci95_low"] = stats["ci95_low"]
+            summary[f"{col}_ci95_high"] = stats["ci95_high"]
+            summary[f"{col}_stats_status"] = stats["stats_status"]
 
         for col in ["reasoning_content_present", "visible_answer_missing"]:
             if col in group:
@@ -104,6 +110,43 @@ def summarize_results(input_path: str | Path, output_path: str | Path) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(summaries).to_csv(output_path, index=False)
     return output_path
+
+
+def _numeric_stats(values: pd.Series) -> dict[str, float | int | str | None]:
+    numeric = [float(value) for value in values.dropna().tolist()]
+    count = len(numeric)
+    if count == 0:
+        return {
+            "mean": None,
+            "p50": None,
+            "p95": None,
+            "count": 0,
+            "std": None,
+            "ci95_low": None,
+            "ci95_high": None,
+            "stats_status": "missing_metric",
+        }
+
+    series = pd.Series(numeric, dtype="float64")
+    mean = statistics.fmean(numeric)
+    std = statistics.stdev(numeric) if count >= 2 else None
+    ci95_low = None
+    ci95_high = None
+    if std is not None:
+        margin = NORMAL_95_Z * (std / math.sqrt(count))
+        ci95_low = round(mean - margin, 3)
+        ci95_high = round(mean + margin, 3)
+
+    return {
+        "mean": round(mean, 3),
+        "p50": round(float(series.quantile(0.50)), 3),
+        "p95": round(float(series.quantile(0.95)), 3),
+        "count": count,
+        "std": round(std, 3) if std is not None else None,
+        "ci95_low": ci95_low,
+        "ci95_high": ci95_high,
+        "stats_status": "ok" if count >= 2 else "insufficient_repetitions",
+    }
 
 
 def _collect_metric_provenance(group: pd.DataFrame) -> dict[str, dict[str, list[str]]]:

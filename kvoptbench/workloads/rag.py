@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from kvoptbench.workloads.common import filler_words, make_item
+from kvoptbench.workloads.common import filler_words, lifecycle_metadata, make_item
 
 
 def generate(count: int, target_input_tokens: int, target_output_tokens: int):
@@ -25,7 +25,18 @@ def generate(count: int, target_input_tokens: int, target_output_tokens: int):
                 target_input_tokens=target_input_tokens,
                 target_output_tokens=target_output_tokens,
                 eval_type="rag_placeholder",
-                metadata={"source_id": f"A{idx}"},
+                metadata={
+                    **lifecycle_metadata(
+                        lifecycle_pattern="retrieval",
+                        workload_profile="rag",
+                        request_group_id="rag_retrieval_group_001",
+                        reuse_hint="related_requests",
+                        required_evaluators=["answer_relevance", "factuality"],
+                        required_metrics=["latency_ms", "error_rate"],
+                        recommended_metrics=["cache_hit_rate", "cache_load_ms"],
+                    ),
+                    "source_id": f"A{idx}",
+                },
             )
         )
     return items

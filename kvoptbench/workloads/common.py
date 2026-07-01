@@ -25,6 +25,40 @@ def filler_words(target_tokens: int, seed: str) -> str:
     return " ".join(words)
 
 
+def lifecycle_metadata(
+    *,
+    lifecycle_pattern: str,
+    workload_profile: str,
+    request_group_id: str,
+    ordering: str = "fixed",
+    session_boundary: str = "request_group",
+    reuse_hint: str = "none",
+    required_evaluators: list[str] | None = None,
+    required_metrics: list[str] | None = None,
+    recommended_metrics: list[str] | None = None,
+) -> dict:
+    """Describe cache-lifecycle workload intent without controlling backend KV state."""
+    return {
+        "lifecycle_mode": {
+            "mode_source": "scbench_inspired_workload_lifecycle_metadata",
+            "kvoptbench_implements_scbench": False,
+            "lifecycle_pattern": lifecycle_pattern,
+            "workload_profile": workload_profile,
+            "request_group": {
+                "group_id": request_group_id,
+                "ordering": ordering,
+                "session_boundary": session_boundary,
+                "reuse_hint": reuse_hint,
+            },
+            "evaluation": {
+                "required_evaluators": required_evaluators or [],
+                "required_metrics": required_metrics or [],
+                "recommended_metrics": recommended_metrics or [],
+            },
+        }
+    }
+
+
 def make_item(
     *,
     task_id: str,

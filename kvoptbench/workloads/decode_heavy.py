@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from kvoptbench.workloads.common import filler_words, make_item
+from kvoptbench.workloads.common import filler_words, lifecycle_metadata, make_item
 
 
 def generate(count: int, target_input_tokens: int, target_output_tokens: int):
@@ -25,6 +25,15 @@ def generate(count: int, target_input_tokens: int, target_output_tokens: int):
                 target_input_tokens=target_input_tokens,
                 target_output_tokens=target_output_tokens,
                 eval_type="contains_expected",
+                metadata=lifecycle_metadata(
+                    lifecycle_pattern="kv_generation",
+                    workload_profile="decode_heavy",
+                    request_group_id="decode_generation_group_001",
+                    reuse_hint="none",
+                    required_evaluators=["output_validity"],
+                    required_metrics=["output_tokens_per_second", "latency_ms", "error_rate"],
+                    recommended_metrics=["input_tokens", "output_tokens"],
+                ),
             )
         )
     return items

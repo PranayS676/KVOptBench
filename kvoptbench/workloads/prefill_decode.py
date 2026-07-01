@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from itertools import product
 
-from kvoptbench.workloads.common import filler_words, make_item
+from kvoptbench.workloads.common import filler_words, lifecycle_metadata, make_item
 
 INPUT_TOKEN_BUCKETS = (512, 2048, 8192, 32768)
 OUTPUT_TOKEN_BUCKETS = (32, 128, 512)
@@ -37,6 +37,15 @@ def generate(count: int, target_input_tokens: int, target_output_tokens: int):
                 shared_prefix_tokens=0,
                 eval_type="contains_expected",
                 metadata={
+                    **lifecycle_metadata(
+                        lifecycle_pattern="kv_generation",
+                        workload_profile="decode_heavy",
+                        request_group_id="prefill_decode_grid_group_001",
+                        reuse_hint="none",
+                        required_evaluators=["output_validity"],
+                        required_metrics=["output_tokens_per_second", "latency_ms", "error_rate"],
+                        recommended_metrics=["input_tokens", "output_tokens"],
+                    ),
                     "input_token_bucket": input_bucket,
                     "output_token_bucket": output_bucket,
                     "expected_bottleneck": expected_bottleneck,

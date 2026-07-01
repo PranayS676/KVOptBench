@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import time
 from pathlib import Path
+from typing import Any
 
 from kvoptbench.client.openai_compat import OpenAICompatClient
 from kvoptbench.config import load_config
@@ -44,7 +46,8 @@ async def run_experiment(config_path: str | Path) -> Path:
     run_id = f"{int(time.time())}-{config.experiment_id}"
     client = OpenAICompatClient(config)
     endpoint_health = await client.healthcheck()
-    environment = capture_environment(Path.cwd())
+    environment_metadata = _environment_metadata(config, config_path)
+    environment = capture_environment(Path.cwd(), metadata=environment_metadata)
     if not endpoint_health.ok:
         results = [
             _failed_healthcheck_result(
@@ -53,6 +56,7 @@ async def run_experiment(config_path: str | Path) -> Path:
                 config=config,
                 endpoint_health=endpoint_health,
                 environment=environment,
+                environment_metadata=environment_metadata,
             )
             for item in items
         ]
@@ -76,20 +80,24 @@ async def run_experiment(config_path: str | Path) -> Path:
         output_tps = response.output_tokens / e2e_seconds if e2e_seconds > 0 else None
         input_tps = response.input_tokens / e2e_seconds if e2e_seconds > 0 else None
         metadata = response.response_metadata
-        missing_metrics = _missing_metrics(response, metadata)
+        missing_metrics = _missing_metrics(response, metadata, environment)
         metric_provenance = build_metric_provenance(
             response=response,
             metadata=metadata,
             missing_metrics=missing_metrics,
             output_tps_available=output_tps is not None,
             input_tps_available=input_tps is not None,
+            environment=environment,
         )
         return RequestResult(
             run_id=run_id,
             experiment_id=config.experiment_id,
             official_run=config.official_run,
             provider=config.provider,
+            gpu_type=environment.gpu_type,
+            gpu_count=environment.gpu_count,
             engine=config.engine,
+            engine_version=environment.engine_version,
             model_id=config.model_id,
             strategy=config.strategy,
             workload=item.workload,
@@ -132,6 +140,7 @@ async def run_experiment(config_path: str | Path) -> Path:
             metadata={
                 "config_metadata": config.metadata,
                 "workload_metadata": item.metadata,
+                "environment_metadata": _public_environment_metadata(environment_metadata),
                 "endpoint_health": endpoint_health.model_dump(),
                 "quality_details": quality.details if quality else {},
                 "response_metadata": {
@@ -169,13 +178,18 @@ def _failed_healthcheck_result(
     config,
     endpoint_health: EndpointHealth,
     environment,
+    environment_metadata: dict[str, Any],
 ) -> RequestResult:
+    missing_metrics = _failure_missing_metrics(environment)
     return RequestResult(
         run_id=run_id,
         experiment_id=config.experiment_id,
         official_run=config.official_run,
         provider=config.provider,
+        gpu_type=environment.gpu_type,
+        gpu_count=environment.gpu_count,
         engine=config.engine,
+        engine_version=environment.engine_version,
         model_id=config.model_id,
         strategy=config.strategy,
         workload=item.workload,
@@ -188,31 +202,20 @@ def _failed_healthcheck_result(
         success=False,
         error_type="EndpointHealthcheckFailed",
         error_message=endpoint_health.error_message or "endpoint health check failed",
-        missing_metrics=[
-            "ttft_ms",
-            "tpot_ms",
-            "itl_ms",
-            "e2e_latency_ms",
-            "engine_version",
-            "gpu_memory_used_gb",
-            "gpu_memory_peak_gb",
-            "gpu_type",
-            "gpu_count",
-            "cache_hit_rate",
-            "cache_miss_penalty_ms",
-        ],
-        metric_provenance=healthcheck_failure_provenance(),
+        missing_metrics=missing_metrics,
+        metric_provenance=healthcheck_failure_provenance(environment),
         environment=environment,
         metadata={
             "config_metadata": config.metadata,
             "workload_metadata": item.metadata,
+            "environment_metadata": _public_environment_metadata(environment_metadata),
             "endpoint_health": endpoint_health.model_dump(),
             "quality_details": {},
         },
     )
 
 
-def _missing_metrics(response, metadata: dict) -> list[str]:
+def _missing_metrics(response, metadata: dict, environment=None) -> list[str]:
     missing = []
     if response.ttft_ms is None:
         missing.append("ttft_ms")
@@ -220,19 +223,92 @@ def _missing_metrics(response, metadata: dict) -> list[str]:
         missing.append("tpot_ms")
     if response.reasoning_content_present and response.first_reasoning_token_ms is None:
         missing.append("first_reasoning_token_ms")
-    for metric in [
-        "engine_version",
-        "gpu_memory_used_gb",
-        "gpu_memory_peak_gb",
-        "gpu_type",
-        "gpu_count",
-    ]:
+    if environment is None or environment.engine_version is None:
+        missing.append("engine_version")
+    if environment is None or environment.gpu_type is None:
+        missing.append("gpu_type")
+    if environment is None or environment.gpu_count is None:
+        missing.append("gpu_count")
+    for metric in ["gpu_memory_used_gb", "gpu_memory_peak_gb"]:
         missing.append(metric)
     if metadata.get("cache_hit_rate") is None:
         missing.append("cache_hit_rate")
     if metadata.get("cache_miss_penalty_ms") is None:
         missing.append("cache_miss_penalty_ms")
     return sorted(set(missing))
+
+
+def _failure_missing_metrics(environment) -> list[str]:
+    missing = [
+        "ttft_ms",
+        "tpot_ms",
+        "itl_ms",
+        "e2e_latency_ms",
+        "gpu_memory_used_gb",
+        "gpu_memory_peak_gb",
+        "cache_hit_rate",
+        "cache_miss_penalty_ms",
+    ]
+    if environment is None or environment.engine_version is None:
+        missing.append("engine_version")
+    if environment is None or environment.gpu_type is None:
+        missing.append("gpu_type")
+    if environment is None or environment.gpu_count is None:
+        missing.append("gpu_count")
+    return sorted(set(missing))
+
+
+def _environment_metadata(config, config_path: str | Path | None) -> dict[str, Any]:
+    metadata = dict(config.endpoint_metadata or {})
+    for field in [
+        "engine_version",
+        "model_revision",
+        "cuda_version",
+        "gpu_type",
+        "gpu_count",
+        "backend_launch_command",
+    ]:
+        value = getattr(config, field, None)
+        if value is not None:
+            metadata[field] = value
+    if config.config_sha256:
+        metadata["config_sha256"] = config.config_sha256
+    elif config_path is not None:
+        metadata["config_sha256"] = _sha256_file(Path(config_path))
+    if config.workload_sha256:
+        metadata["workload_sha256"] = config.workload_sha256
+    elif config.workload_file.exists():
+        metadata["workload_sha256"] = _sha256_file(config.workload_file)
+    return metadata
+
+
+def _sha256_file(path: Path) -> str | None:
+    try:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except OSError:
+        return None
+
+
+def _public_environment_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in metadata.items()
+        if key
+        in {
+            "engine_version",
+            "model_revision",
+            "cuda_version",
+            "gpu_type",
+            "gpu_count",
+            "backend_launch_command",
+            "config_sha256",
+            "workload_sha256",
+        }
+    }
 
 
 def main() -> None:

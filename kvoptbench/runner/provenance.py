@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from kvoptbench.schemas import MetricProvenance, TimedResponse
+from kvoptbench.schemas import MetricProvenance, RunEnvironmentSnapshot, TimedResponse
 
 
 UNAVAILABLE_ENGINE_METRIC_REASON = (
@@ -19,6 +19,7 @@ def build_metric_provenance(
     output_tps_available: bool,
     input_tps_available: bool,
     requests_per_second_available: bool = False,
+    environment: RunEnvironmentSnapshot | None = None,
 ) -> dict[str, MetricProvenance]:
     """Build request-level metric provenance for observed, estimated, and null metrics."""
     missing = set(missing_metrics)
@@ -165,6 +166,14 @@ def build_metric_provenance(
             if "cache_miss_penalty_ms" in missing
             else None,
         ),
+        "engine_version": MetricProvenance(
+            source_type="engine_reported",
+            measurement_method="experiment config environment metadata",
+            available=environment is not None and environment.engine_version is not None,
+            missing_reason=UNAVAILABLE_ENGINE_METRIC_REASON
+            if "engine_version" in missing
+            else None,
+        ),
         "gpu_memory_used_gb": MetricProvenance(
             source_type="gpu_reported",
             measurement_method="GPU telemetry adapter",
@@ -179,6 +188,18 @@ def build_metric_provenance(
             available=False,
             missing_reason=UNAVAILABLE_GPU_METRIC_REASON,
         ),
+        "gpu_type": MetricProvenance(
+            source_type="gpu_reported",
+            measurement_method="experiment config environment metadata or GPU telemetry adapter",
+            available=environment is not None and environment.gpu_type is not None,
+            missing_reason=UNAVAILABLE_GPU_METRIC_REASON if "gpu_type" in missing else None,
+        ),
+        "gpu_count": MetricProvenance(
+            source_type="gpu_reported",
+            measurement_method="experiment config environment metadata or GPU telemetry adapter",
+            available=environment is not None and environment.gpu_count is not None,
+            missing_reason=UNAVAILABLE_GPU_METRIC_REASON if "gpu_count" in missing else None,
+        ),
         "quality_score": MetricProvenance(
             source_type="derived",
             measurement_method="configured KVOptBench evaluator",
@@ -191,7 +212,9 @@ def build_metric_provenance(
     return provenance
 
 
-def healthcheck_failure_provenance() -> dict[str, MetricProvenance]:
+def healthcheck_failure_provenance(
+    environment: RunEnvironmentSnapshot | None = None,
+) -> dict[str, MetricProvenance]:
     """Metric provenance for synthetic failure rows when endpoint healthcheck fails."""
     unavailable = {
         "ttft_ms": ("client_observed", "time_to_first_visible_stream_chunk_or_mock_metadata", "ms"),
@@ -203,8 +226,19 @@ def healthcheck_failure_provenance() -> dict[str, MetricProvenance]:
         "cache_miss_penalty_ms": ("engine_reported", "endpoint or mock response metadata", "ms"),
         "gpu_memory_used_gb": ("gpu_reported", "GPU telemetry adapter", "GB"),
         "gpu_memory_peak_gb": ("gpu_reported", "GPU telemetry adapter", "GB"),
+        "engine_version": ("engine_reported", "experiment config environment metadata", None),
+        "gpu_type": (
+            "gpu_reported",
+            "experiment config environment metadata or GPU telemetry adapter",
+            None,
+        ),
+        "gpu_count": (
+            "gpu_reported",
+            "experiment config environment metadata or GPU telemetry adapter",
+            None,
+        ),
     }
-    return {
+    provenance = {
         metric: MetricProvenance(
             source_type=source_type,  # type: ignore[arg-type]
             measurement_method=method,
@@ -214,6 +248,26 @@ def healthcheck_failure_provenance() -> dict[str, MetricProvenance]:
         )
         for metric, (source_type, method, unit) in unavailable.items()
     }
+    if environment is not None:
+        if environment.engine_version is not None:
+            provenance["engine_version"] = MetricProvenance(
+                source_type="engine_reported",
+                measurement_method="experiment config environment metadata",
+                available=True,
+            )
+        if environment.gpu_type is not None:
+            provenance["gpu_type"] = MetricProvenance(
+                source_type="gpu_reported",
+                measurement_method="experiment config environment metadata or GPU telemetry adapter",
+                available=True,
+            )
+        if environment.gpu_count is not None:
+            provenance["gpu_count"] = MetricProvenance(
+                source_type="gpu_reported",
+                measurement_method="experiment config environment metadata or GPU telemetry adapter",
+                available=True,
+            )
+    return provenance
 
 
 def mark_requests_per_second_available(

@@ -35,6 +35,10 @@ def test_generate_profiles_return_valid_items(profile: str) -> None:
         assert validated.prompt
         assert validated.target_input_tokens == 512
         assert validated.target_output_tokens == 64
+        lifecycle = validated.metadata["lifecycle_mode"]
+        assert lifecycle["kvoptbench_implements_scbench"] is False
+        assert lifecycle["request_group"]["ordering"] == "fixed"
+        assert lifecycle["evaluation"]["required_metrics"]
 
 
 def test_shared_prefix_items_share_prefix_group() -> None:
@@ -127,6 +131,41 @@ def test_long_context_pressure_workload_accepts_custom_context_buckets() -> None
 
     assert [item.metadata["context_token_bucket"] for item in items] == [128, 512, 2048]
     assert [item.target_input_tokens for item in items] == [128, 512, 2048]
+
+
+def test_lifecycle_metadata_covers_supported_patterns() -> None:
+    profiles = {
+        "decode_heavy": "kv_generation",
+        "long_context_pressure": "compression",
+        "long_context_needle": "loading",
+        "rag": "retrieval",
+        "tool_calling": "multi_request",
+        "agentic_coding": "multi_turn",
+    }
+
+    observed = {}
+    for profile, expected_pattern in profiles.items():
+        item = generate_items(
+            profile=profile,
+            count=1,
+            target_input_tokens=512,
+            target_output_tokens=64,
+        )[0]
+        lifecycle = item.metadata["lifecycle_mode"]
+        observed[profile] = lifecycle["lifecycle_pattern"]
+        assert lifecycle["lifecycle_pattern"] == expected_pattern
+        assert lifecycle["mode_source"] == "scbench_inspired_workload_lifecycle_metadata"
+        assert lifecycle["kvoptbench_implements_scbench"] is False
+        assert lifecycle["evaluation"]["required_evaluators"]
+
+    assert set(observed.values()) == {
+        "kv_generation",
+        "compression",
+        "loading",
+        "retrieval",
+        "multi_request",
+        "multi_turn",
+    }
 
 
 def test_needle_workload_contains_expected_answer() -> None:

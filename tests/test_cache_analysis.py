@@ -148,10 +148,26 @@ def test_compare_cache_results_writes_control_adjusted_csv(tmp_path) -> None:
             workload_profile="shared_prefix",
         ),
         _cache_row(
+            experiment_id="cache_exp_shared_cold_2",
+            workload="shared_prefix_long_doc",
+            cache_state="cold",
+            ttft_ms=340.0,
+            shared_prefix_tokens=12000,
+            workload_profile="shared_prefix",
+        ),
+        _cache_row(
             experiment_id="cache_exp_shared_warm",
             workload="shared_prefix_long_doc",
             cache_state="warm",
             ttft_ms=110.0,
+            shared_prefix_tokens=12000,
+            workload_profile="shared_prefix",
+        ),
+        _cache_row(
+            experiment_id="cache_exp_shared_warm_2",
+            workload="shared_prefix_long_doc",
+            cache_state="warm",
+            ttft_ms=130.0,
             shared_prefix_tokens=12000,
             workload_profile="shared_prefix",
         ),
@@ -164,10 +180,26 @@ def test_compare_cache_results_writes_control_adjusted_csv(tmp_path) -> None:
             workload_profile="random_prefix",
         ),
         _cache_row(
+            experiment_id="cache_exp_random_cold_2",
+            workload="random_prefix_control",
+            cache_state="cold",
+            ttft_ms=297.0,
+            shared_prefix_tokens=0,
+            workload_profile="random_prefix",
+        ),
+        _cache_row(
             experiment_id="cache_exp_random_warm",
             workload="random_prefix_control",
             cache_state="warm",
             ttft_ms=280.0,
+            shared_prefix_tokens=0,
+            workload_profile="random_prefix",
+        ),
+        _cache_row(
+            experiment_id="cache_exp_random_warm_2",
+            workload="random_prefix_control",
+            cache_state="warm",
+            ttft_ms=282.0,
             shared_prefix_tokens=0,
             workload_profile="random_prefix",
         ),
@@ -184,10 +216,14 @@ def test_compare_cache_results_writes_control_adjusted_csv(tmp_path) -> None:
     assert list(frame["engine"]) == ["vllm"]
     row = frame.iloc[0]
     assert row["strategy"] == "cache_on"
-    assert row["shared_cold_ttft_ms"] == 320.0
-    assert row["shared_warm_ttft_ms"] == 110.0
-    assert row["random_cold_ttft_ms"] == 295.0
-    assert row["random_warm_ttft_ms"] == 280.0
+    assert row["shared_cold_ttft_ms"] == 330.0
+    assert row["shared_warm_ttft_ms"] == 120.0
+    assert row["random_cold_ttft_ms"] == 296.0
+    assert row["random_warm_ttft_ms"] == 281.0
+    assert row["shared_cold_ttft_ms_count"] == 2
+    assert row["shared_cold_ttft_ms_stats_status"] == "ok"
+    assert row["shared_cold_ttft_ms_ci95_low"] < row["shared_cold_ttft_ms"]
+    assert row["shared_cold_ttft_ms_ci95_high"] > row["shared_cold_ttft_ms"]
     assert row["shared_cache_miss_penalty_ms"] == 210.0
     assert row["random_cache_miss_penalty_ms"] == 15.0
     assert row["control_adjusted_cache_gain_ms"] == 195.0

@@ -9,6 +9,7 @@ from typing import Any
 
 import pandas as pd
 
+from kvoptbench.analysis.statistics import summarize_metric_values
 from kvoptbench.analysis.cache import (
     cache_miss_penalty_ms,
     infer_workload_profile,
@@ -25,6 +26,22 @@ CACHE_COMPARISON_COLUMNS = [
     "shared_warm_ttft_ms",
     "random_cold_ttft_ms",
     "random_warm_ttft_ms",
+    "shared_cold_ttft_ms_count",
+    "shared_cold_ttft_ms_ci95_low",
+    "shared_cold_ttft_ms_ci95_high",
+    "shared_cold_ttft_ms_stats_status",
+    "shared_warm_ttft_ms_count",
+    "shared_warm_ttft_ms_ci95_low",
+    "shared_warm_ttft_ms_ci95_high",
+    "shared_warm_ttft_ms_stats_status",
+    "random_cold_ttft_ms_count",
+    "random_cold_ttft_ms_ci95_low",
+    "random_cold_ttft_ms_ci95_high",
+    "random_cold_ttft_ms_stats_status",
+    "random_warm_ttft_ms_count",
+    "random_warm_ttft_ms_ci95_low",
+    "random_warm_ttft_ms_ci95_high",
+    "random_warm_ttft_ms_stats_status",
     "shared_cache_miss_penalty_ms",
     "random_cache_miss_penalty_ms",
     "control_adjusted_cache_gain_ms",
@@ -71,10 +88,14 @@ def build_cache_comparison(frame: pd.DataFrame) -> pd.DataFrame:
             keys = (keys,)
         by_group = dict(zip(group_cols, keys, strict=True))
 
-        shared_cold = _mean_ttft(group, "shared_prefix", "cold")
-        shared_warm = _mean_ttft(group, "shared_prefix", "warm")
-        random_cold = _mean_ttft(group, "random_prefix", "cold")
-        random_warm = _mean_ttft(group, "random_prefix", "warm")
+        shared_cold_stats = _ttft_stats(group, "shared_prefix", "cold")
+        shared_warm_stats = _ttft_stats(group, "shared_prefix", "warm")
+        random_cold_stats = _ttft_stats(group, "random_prefix", "cold")
+        random_warm_stats = _ttft_stats(group, "random_prefix", "warm")
+        shared_cold = shared_cold_stats["mean"]
+        shared_warm = shared_warm_stats["mean"]
+        random_cold = random_cold_stats["mean"]
+        random_warm = random_warm_stats["mean"]
         if shared_cold is None and shared_warm is None:
             continue
 
@@ -90,6 +111,10 @@ def build_cache_comparison(frame: pd.DataFrame) -> pd.DataFrame:
                 "shared_warm_ttft_ms": shared_warm,
                 "random_cold_ttft_ms": random_cold,
                 "random_warm_ttft_ms": random_warm,
+                **_render_repeated_stats("shared_cold_ttft_ms", shared_cold_stats),
+                **_render_repeated_stats("shared_warm_ttft_ms", shared_warm_stats),
+                **_render_repeated_stats("random_cold_ttft_ms", random_cold_stats),
+                **_render_repeated_stats("random_warm_ttft_ms", random_warm_stats),
                 "shared_cache_miss_penalty_ms": shared_penalty,
                 "random_cache_miss_penalty_ms": random_penalty,
                 "control_adjusted_cache_gain_ms": control_adjusted,
@@ -121,13 +146,28 @@ def _read_rows(input_path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _mean_ttft(group: pd.DataFrame, workload_profile: str, cache_state: str) -> float | None:
+def _ttft_stats(group: pd.DataFrame, workload_profile: str, cache_state: str) -> dict[str, Any]:
     values = group[
         (group["_workload_profile"] == workload_profile) & (group["cache_state"] == cache_state)
     ]["ttft_ms"].dropna()
-    if values.empty:
-        return None
-    return round(float(values.mean()), 3)
+    stats = summarize_metric_values(values)
+    return {
+        **stats,
+        "stats_status": "ok"
+        if int(stats["count"] or 0) >= 2
+        else "insufficient_repetitions"
+        if int(stats["count"] or 0) == 1
+        else "missing_metric",
+    }
+
+
+def _render_repeated_stats(prefix: str, stats: dict[str, Any]) -> dict[str, Any]:
+    return {
+        f"{prefix}_count": stats["count"],
+        f"{prefix}_ci95_low": stats["ci95_low"],
+        f"{prefix}_ci95_high": stats["ci95_high"],
+        f"{prefix}_stats_status": stats["stats_status"],
+    }
 
 
 def _shared_prefix_tokens(group: pd.DataFrame) -> int:

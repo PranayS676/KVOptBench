@@ -1,6 +1,8 @@
 from pathlib import Path
+import json
 
 from kvoptbench.runner.schedule import build_schedule, run_schedule
+from kvoptbench.strategy.plan_run import run_strategy_plan, write_strategy_plan
 
 
 def test_build_schedule_preserves_input_order_without_randomization() -> None:
@@ -69,3 +71,96 @@ def test_run_schedule_delegates_in_scheduled_order() -> None:
         Path("results/3-a.jsonl"),
         Path("results/4-b.jsonl"),
     ]
+
+
+def test_strategy_plan_writes_matrix_manifest_and_configs(tmp_path: Path) -> None:
+    workload_pack = tmp_path / "workload_pack.yaml"
+    workload_pack.write_text(
+        "\n".join(
+            [
+                "workloads:",
+                "  shared_prefix: workloads/generated/shared.jsonl",
+                "  random_prefix: workloads/generated/random.jsonl",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = write_strategy_plan(
+        plan_dir=tmp_path / "plan",
+        matrix_id="cache_matrix",
+        provider="local",
+        engine="vllm",
+        model_id="example/model",
+        base_url="http://127.0.0.1:8000/v1",
+        workload_pack=workload_pack,
+        strategy_families=["cache"],
+        strategies=["cache_on"],
+        concurrencies=[1, 4],
+        output_dir=tmp_path / "raw",
+        repeat_count=3,
+        randomization_seed=17,
+    )
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+
+    assert len(result.config_paths) == 8
+    assert manifest["matrix_id"] == "cache_matrix"
+    assert manifest["repeat_count"] == 3
+    assert manifest["randomization_seed"] == 17
+    assert {entry["workload_role"] for entry in manifest["configs"]} == {
+        "shared_prefix",
+        "random_prefix",
+    }
+    assert {entry["cache_pass"] for entry in manifest["configs"]} == {"cold", "warm"}
+    assert all("config_sha256" in entry for entry in manifest["configs"])
+
+
+def test_strategy_run_dry_run_writes_reproducible_run_manifest(tmp_path: Path) -> None:
+    workload_pack = tmp_path / "workload_pack.yaml"
+    workload_pack.write_text(
+        "\n".join(
+            [
+                "workloads:",
+                "  primary: workloads/generated/decode.jsonl",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    planned = write_strategy_plan(
+        plan_dir=tmp_path / "plan",
+        matrix_id="decode_matrix",
+        provider="local",
+        engine="vllm",
+        model_id="example/model",
+        base_url="http://127.0.0.1:8000/v1",
+        workload_pack=workload_pack,
+        strategy_families=["decode-heavy"],
+        strategies=["baseline"],
+        concurrencies=[1],
+        output_dir=tmp_path / "raw",
+        repeat_count=2,
+        randomization_seed=5,
+    )
+
+    first = run_strategy_plan(
+        matrix_manifest=planned.manifest_path,
+        output_run_manifest=tmp_path / "run_manifest.json",
+        randomize=True,
+        dry_run=True,
+    )
+    second = run_strategy_plan(
+        matrix_manifest=planned.manifest_path,
+        output_run_manifest=tmp_path / "run_manifest_2.json",
+        randomize=True,
+        dry_run=True,
+    )
+
+    first_manifest = json.loads(first.run_manifest_path.read_text(encoding="utf-8"))
+    second_manifest = json.loads(second.run_manifest_path.read_text(encoding="utf-8"))
+
+    assert first_manifest["dry_run"] is True
+    assert first_manifest["outputs"] == []
+    assert first_manifest["planned_runs"] == second_manifest["planned_runs"]
+    assert first_manifest["planned_runs"][0]["repeat_count"] == 2
+    assert first_manifest["planned_runs"][0]["randomize"] is True

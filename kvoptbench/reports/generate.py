@@ -107,6 +107,8 @@ def generate_report(
             f"{_fmt(row.get('ttft_ms_p50'))} | {_fmt(row.get('ttft_ms_p95'))} |"
         )
 
+    _append_repetition_statistics(lines, frame)
+
     lines.extend(
         [
             "",
@@ -322,6 +324,49 @@ def _read_disaggregation(disagg_input_path: str | Path | None) -> pd.DataFrame |
     if disagg_frame.empty:
         return pd.DataFrame()
     return disagg_frame
+
+
+def _append_repetition_statistics(lines: list[str], frame: pd.DataFrame) -> None:
+    stats_columns = {
+        "ttft_ms_count",
+        "ttft_ms_ci95_low",
+        "ttft_ms_ci95_high",
+        "ttft_ms_stats_status",
+        "e2e_latency_ms_count",
+        "e2e_latency_ms_ci95_low",
+        "e2e_latency_ms_ci95_high",
+        "e2e_latency_ms_stats_status",
+    }
+    if not stats_columns.intersection(frame.columns):
+        return
+
+    lines.extend(
+        [
+            "",
+            "## Repetition Statistics",
+            "",
+            "| workload | strategy | TTFT n | TTFT 95% CI ms | E2E n | E2E 95% CI ms | stats status |",
+            "|---|---|---:|---:|---:|---:|---|",
+        ]
+    )
+    for _, row in frame.iterrows():
+        ttft_status = str(row.get("ttft_ms_stats_status", "n/a"))
+        e2e_status = str(row.get("e2e_latency_ms_stats_status", "n/a"))
+        status = "; ".join(sorted({ttft_status, e2e_status}))
+        lines.append(
+            f"| {row.get('workload', 'unknown')} | {row.get('strategy', 'unknown')} | "
+            f"{_fmt(row.get('ttft_ms_count'))} | "
+            f"{_ci(row.get('ttft_ms_ci95_low'), row.get('ttft_ms_ci95_high'))} | "
+            f"{_fmt(row.get('e2e_latency_ms_count'))} | "
+            f"{_ci(row.get('e2e_latency_ms_ci95_low'), row.get('e2e_latency_ms_ci95_high'))} | "
+            f"{status} |"
+        )
+
+
+def _ci(low, high) -> str:
+    if pd.isna(low) or pd.isna(high):
+        return "n/a"
+    return f"{_fmt(low)} to {_fmt(high)}"
 
 
 def _read_strategy_advisor(strategy_input_path: str | Path | None):

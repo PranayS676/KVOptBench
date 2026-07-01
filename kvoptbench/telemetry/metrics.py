@@ -41,3 +41,4 @@ class TelemetrySnapshot(BaseModel):
     source_type: str
     source_path: str | None = None
     samples: list[dict[str, Any]] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)

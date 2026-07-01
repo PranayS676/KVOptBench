@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import csv
+import json
 from pathlib import Path
+from typing import Any, Literal
 
 import typer
 from rich import print
@@ -606,6 +609,173 @@ def run_command(
     print(f"[green]Wrote results[/green] {output}")
 
 
+@app.command("import")
+def import_command(
+    tool: Literal["vllm-bench", "genai-perf", "aiperf"] = typer.Option(..., "--tool"),
+    source: Path = typer.Option(..., "--source", "-s"),
+    output: Path = typer.Option(..., "--output", "-o"),
+    experiment_id: str = typer.Option(..., "--experiment-id"),
+    workload: str = typer.Option(..., "--workload"),
+    provider: str = typer.Option("local", "--provider"),
+    engine: str = typer.Option("unknown", "--engine", "-e"),
+    strategy: str = typer.Option("imported", "--strategy"),
+    model_id: str | None = typer.Option(None, "--model-id", "-m"),
+    run_id: str | None = typer.Option(None, "--run-id"),
+    concurrency: int = typer.Option(1, "--concurrency", min=1),
+    granularity: Literal["auto", "request", "aggregate"] = typer.Option(
+        "auto", "--granularity"
+    ),
+    manifest_output: Path | None = typer.Option(None, "--manifest-output"),
+    fail_on_missing_required: bool = typer.Option(False, "--fail-on-missing-required"),
+) -> None:
+    """Import external benchmark artifacts without claiming KVOptBench ran them."""
+    try:
+        if tool == "vllm-bench":
+            from kvoptbench.importers.vllm_bench import import_vllm_bench
+
+            rows = import_vllm_bench(
+                source,
+                experiment_id=experiment_id,
+                workload=workload,
+                provider=provider,
+                engine=engine if engine != "unknown" else "vllm",
+                strategy=strategy,
+                model_id=model_id,
+                run_id=run_id,
+                concurrency=concurrency,
+            )
+            missing_metrics = _collect_import_missing_metrics(rows)
+            _write_jsonl(output, rows)
+            manifest = _basic_import_manifest(
+                tool=tool,
+                source=source,
+                granularity="request",
+                row_count=len(rows),
+                missing_metrics=missing_metrics,
+            )
+            written_kind = "request JSONL"
+        else:
+            from kvoptbench.importers.aiperf import import_aiperf
+            from kvoptbench.importers.genai_perf import import_genai_perf
+
+            importer = import_genai_perf if tool == "genai-perf" else import_aiperf
+            result = importer(
+                source,
+                experiment_id=experiment_id,
+                workload=workload,
+                provider=provider,
+                engine=engine,
+                strategy=strategy,
+                model_id=model_id,
+                run_id=run_id,
+                concurrency=concurrency,
+                granularity=granularity,
+            )
+            missing_metrics = result.missing_metrics
+            manifest = result.source_manifest
+            if result.granularity == "request":
+                _write_jsonl(output, result.request_rows)
+                written_kind = "request JSONL"
+            else:
+                _write_csv(output, result.summary_rows)
+                written_kind = "summary CSV"
+
+        if manifest_output is not None:
+            manifest_output.parent.mkdir(parents=True, exist_ok=True)
+            manifest_output.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        if fail_on_missing_required and missing_metrics:
+            raise ValueError("Missing imported metrics: " + ", ".join(missing_metrics))
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[red]FAILED[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    print(f"[green]Wrote imported {written_kind}[/green] {output}")
+    if manifest_output is not None:
+        print(f"[green]Wrote import manifest[/green] {manifest_output}")
+
+
+@app.command("strategy-plan")
+def strategy_plan_command(
+    plan_dir: Path = typer.Option(..., "--plan-dir"),
+    matrix_id: str = typer.Option(..., "--matrix-id"),
+    provider: str = typer.Option(..., "--provider"),
+    engine: str = typer.Option(..., "--engine", "-e"),
+    model_id: str = typer.Option(..., "--model-id", "-m"),
+    base_url: str = typer.Option(..., "--base-url"),
+    workload_pack: Path = typer.Option(..., "--workload-pack"),
+    strategy_family: list[str] = typer.Option(..., "--strategy-family"),
+    strategy: list[str] = typer.Option(..., "--strategy"),
+    concurrency: list[int] = typer.Option([1], "--concurrency", min=1),
+    output_dir: Path = typer.Option(..., "--output-dir"),
+    repeat_count: int = typer.Option(1, "--repeat-count", min=1),
+    randomization_seed: int = typer.Option(0, "--randomization-seed"),
+    run_label: str = typer.Option("exploratory", "--run-label"),
+    max_output_tokens: int = typer.Option(256, "--max-output-tokens", min=1),
+    endpoint_type: str | None = typer.Option(None, "--endpoint-type"),
+) -> None:
+    """Write a strategy matrix manifest and normal experiment YAML configs."""
+    from kvoptbench.strategy.plan_run import write_strategy_plan
+
+    try:
+        result = write_strategy_plan(
+            plan_dir=plan_dir,
+            matrix_id=matrix_id,
+            provider=provider,
+            engine=engine,
+            model_id=model_id,
+            base_url=base_url,
+            workload_pack=workload_pack,
+            strategy_families=strategy_family,
+            strategies=strategy,
+            concurrencies=concurrency,
+            output_dir=output_dir,
+            repeat_count=repeat_count,
+            randomization_seed=randomization_seed,
+            run_label=run_label,
+            max_output_tokens=max_output_tokens,
+            endpoint_type=endpoint_type,
+        )
+    except ValueError as exc:
+        print(f"[red]FAILED[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    print(
+        f"[green]Wrote {len(result.config_paths)} strategy configs[/green] "
+        f"to {result.plan_dir}"
+    )
+    print(f"[green]Wrote matrix manifest[/green] {result.manifest_path}")
+
+
+@app.command("strategy-run")
+def strategy_run_command(
+    matrix_manifest: Path = typer.Option(..., "--matrix-manifest"),
+    output_run_manifest: Path | None = typer.Option(None, "--output-run-manifest"),
+    repeat_count: int | None = typer.Option(None, "--repeat-count", min=1),
+    randomization_seed: int | None = typer.Option(None, "--randomization-seed"),
+    randomize: bool = typer.Option(False, "--randomize"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    """Run or dry-run a strategy matrix through a deterministic schedule."""
+    from kvoptbench.strategy.plan_run import run_strategy_plan
+
+    try:
+        result = run_strategy_plan(
+            matrix_manifest=matrix_manifest,
+            output_run_manifest=output_run_manifest,
+            repeat_count=repeat_count,
+            randomization_seed=randomization_seed,
+            randomize=randomize,
+            dry_run=dry_run,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[red]FAILED[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    print(f"[green]Wrote run manifest[/green] {result.run_manifest_path}")
+    if dry_run:
+        print("[yellow]Dry run only; no experiment configs were executed.[/yellow]")
+    else:
+        print(f"[green]Ran {len(result.output_paths)} scheduled configs[/green]")
+
+
 @app.command("summarize")
 def summarize_command(
     input: Path = typer.Option(..., "--input", "-i"),
@@ -776,6 +946,55 @@ def _parse_csv_strings(raw: str | None) -> tuple[str, ...]:
     if raw is None or not raw.strip():
         return ()
     return tuple(value.strip() for value in raw.split(",") if value.strip())
+
+
+def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = sorted({key for row in rows for key in row})
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({key: _csv_value(row.get(key)) for key in fieldnames})
+
+
+def _csv_value(value: Any) -> Any:
+    if isinstance(value, dict | list):
+        return json.dumps(value, sort_keys=True)
+    return value
+
+
+def _collect_import_missing_metrics(rows: list[dict[str, Any]]) -> list[str]:
+    missing: set[str] = set()
+    for row in rows:
+        for metric in row.get("missing_metrics", []):
+            missing.add(str(metric))
+    return sorted(missing)
+
+
+def _basic_import_manifest(
+    *,
+    tool: str,
+    source: Path,
+    granularity: str,
+    row_count: int,
+    missing_metrics: list[str],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "1",
+        "tool": tool,
+        "source": {"file_name": source.name},
+        "granularity": granularity,
+        "row_count": row_count,
+        "missing_metrics": missing_metrics,
+    }
 
 
 if __name__ == "__main__":

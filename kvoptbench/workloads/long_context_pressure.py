@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from kvoptbench.workloads.common import filler_words, make_item
+from kvoptbench.workloads.common import filler_words, lifecycle_metadata, make_item
 
 DEFAULT_CONTEXT_BUCKETS = (4096, 16384, 32768, 65536, 131072)
 
@@ -44,6 +44,15 @@ def generate(
                 shared_prefix_tokens=0,
                 eval_type="contains_expected",
                 metadata={
+                    **lifecycle_metadata(
+                        lifecycle_pattern="compression",
+                        workload_profile="long_context_qa",
+                        request_group_id="long_context_pressure_group_001",
+                        reuse_hint="none",
+                        required_evaluators=["answer_correctness", "factuality"],
+                        required_metrics=["input_tokens", "output_tokens", "latency_ms"],
+                        recommended_metrics=["gpu_memory_peak_gb", "cache_hit_rate"],
+                    ),
                     "context_token_bucket": bucket,
                     "pressure_level": pressure_level,
                     "expected_pressure": expected_pressure,
