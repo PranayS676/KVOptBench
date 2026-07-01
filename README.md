@@ -105,13 +105,34 @@ python -m pip install -e ".[dev,data]"
 
 The mock path validates the benchmark harness without a GPU, RunPod, model weights, or external API keys.
 
+Create the golden QASPER-shaped starter pack:
+
+```bash
+kvoptbench init --output-dir .kvoptbench-starter
+```
+
 Start the mock server:
 
 ```bash
 python -m kvoptbench.mock_server --port 8000
 ```
 
-In another terminal:
+In another terminal, run the preflight checks and complete artifact workflow:
+
+```bash
+kvoptbench doctor --config .kvoptbench-starter/configs/golden_qasper_mock.yaml
+kvoptbench workflow run \
+  --config .kvoptbench-starter/configs/golden_qasper_mock.yaml \
+  --output-dir results/golden \
+  --package-dir results/packages/golden \
+  --run-name golden-qasper-mock
+```
+
+The workflow command runs the config, writes request JSONL, summarizes to CSV,
+generates a Markdown report, writes strategy-advisor outputs, and builds a
+reproducible result package.
+
+You can also run the same steps manually:
 
 ```bash
 kvoptbench generate-workload --profile shared_prefix --out workloads/generated/shared_prefix_32k.jsonl
