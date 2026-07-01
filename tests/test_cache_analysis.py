@@ -227,6 +227,7 @@ def test_compare_cache_results_writes_control_adjusted_csv(tmp_path) -> None:
     assert row["shared_cache_miss_penalty_ms"] == 210.0
     assert row["random_cache_miss_penalty_ms"] == 15.0
     assert row["control_adjusted_cache_gain_ms"] == 195.0
+    assert row["shared_cache_effect_size"] < 0
     assert row["shared_prefix_tokens"] == 12000
     assert row["miss_penalty_per_1k_tokens"] == 17.5
     assert row["interpretation"] == "credible_cache_reuse_signal"

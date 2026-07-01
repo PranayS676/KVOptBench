@@ -59,6 +59,8 @@ def test_compare_speculative_decoding_results_computes_deltas_and_interpretation
     assert by_bucket[256]["speculative_decoding_interpretation"] == (
         "speculative_decoding_promising"
     )
+    assert "baseline_ttft_ms_stats_status" in frame.columns
+    assert "ttft_ms_effect_size" in frame.columns
     assert by_bucket[512]["speculative_decoding_interpretation"] == "quality_regression"
 
 

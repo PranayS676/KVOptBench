@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def utc_now_iso() -> str:
@@ -53,6 +53,7 @@ class ExperimentConfig(BaseModel):
     workload_sha256: str | None = None
     endpoint_metadata: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    telemetry: TelemetryConfig | None = None
 
     @field_validator("experiment_id", "provider", "engine", "model_id", "strategy", "base_url")
     @classmethod
@@ -88,6 +89,87 @@ class WorkloadItem(BaseModel):
         if not value or not value.strip():
             raise ValueError("must be a non-empty string")
         return value
+
+
+class PrometheusTelemetrySource(BaseModel):
+    """One Prometheus-compatible telemetry endpoint to scrape during a run."""
+
+    model_config = ConfigDict(extra="allow")
+
+    name: str = "prometheus"
+    url: str
+    timeout_seconds: float = Field(default=2.0, gt=0)
+    expected_metrics: list[str] = Field(default_factory=list)
+    metric_aliases: dict[str, str] = Field(default_factory=dict)
+    scrape_phases: list[Literal["before_run", "during_run", "after_run"]] = Field(
+        default_factory=lambda: ["before_run", "after_run"]
+    )
+    scrape_interval_seconds: float | None = Field(default=None, gt=0)
+
+    @field_validator("name", "url")
+    @classmethod
+    def _required_prometheus_text(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("must be a non-empty string")
+        return value.strip()
+
+
+class GpuTelemetryConfig(BaseModel):
+    """Live GPU sampling configuration."""
+
+    model_config = ConfigDict(extra="allow")
+
+    enabled: bool = True
+    provider: Literal["nvidia_smi", "dcgm"] = "nvidia_smi"
+    sample_interval_seconds: float | None = Field(default=1.0, gt=0)
+    expected_metrics: list[str] = Field(
+        default_factory=lambda: ["gpu_memory_used_gb", "gpu_memory_peak_gb"]
+    )
+
+
+class LmcacheTelemetrySource(BaseModel):
+    """LMCache telemetry source using Prometheus text or structured JSON/JSONL files."""
+
+    model_config = ConfigDict(extra="allow")
+
+    name: str = "lmcache"
+    url: str | None = None
+    path: Path | None = None
+    format: Literal["prometheus", "json", "jsonl"] = "prometheus"
+    timeout_seconds: float = Field(default=2.0, gt=0)
+    expected_metrics: list[str] = Field(default_factory=list)
+    metric_aliases: dict[str, str] = Field(default_factory=dict)
+    scrape_phases: list[Literal["before_run", "during_run", "after_run"]] = Field(
+        default_factory=lambda: ["before_run", "after_run"]
+    )
+    scrape_interval_seconds: float | None = Field(default=None, gt=0)
+
+    @field_validator("name")
+    @classmethod
+    def _required_lmcache_name(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("must be a non-empty string")
+        return value.strip()
+
+    @model_validator(mode="after")
+    def _require_source(self) -> "LmcacheTelemetrySource":
+        if self.format in {"json", "jsonl"} and self.path is None:
+            raise ValueError("path is required for LMCache JSON/JSONL telemetry")
+        if self.format == "prometheus" and self.url is None and self.path is None:
+            raise ValueError("url or path is required for LMCache Prometheus telemetry")
+        return self
+
+
+class TelemetryConfig(BaseModel):
+    """Optional run-level telemetry collection configuration."""
+
+    model_config = ConfigDict(extra="allow")
+
+    enabled: bool = False
+    output_dir: Path | None = None
+    prometheus: list[PrometheusTelemetrySource] = Field(default_factory=list)
+    gpu: GpuTelemetryConfig | None = None
+    lmcache: list[LmcacheTelemetrySource] = Field(default_factory=list)
 
 
 class QualityResult(BaseModel):
@@ -294,6 +376,9 @@ class RequestResult(BaseModel):
     output_tokens_per_second: float | None = None
     gpu_memory_used_gb: float | None = None
     gpu_memory_peak_gb: float | None = None
+    telemetry_run_id: str | None = None
+    telemetry_summary_path: str | None = None
+    telemetry_snapshots_path: str | None = None
     success: bool = True
     error_type: str | None = None
     error_message: str | None = None

@@ -9,11 +9,28 @@ from typing import Any
 
 import pandas as pd
 
+from kvoptbench.analysis.comparison_stats import (
+    add_group_metric_stats,
+    repeated_comparison_columns,
+    repeated_comparison_fields,
+)
+
 QUALITY_REGRESSION_THRESHOLD = -0.05
 LATENCY_REGRESSION_PCT = 20.0
 MEMORY_IMPROVEMENT_PCT = -5.0
 THROUGHPUT_IMPROVEMENT_PCT = 5.0
 SUCCESS_RATE_FLOOR = 0.95
+REPEATED_METRIC_SPECS = [
+    ("baseline_ttft_ms", "offload_ttft_ms", "ttft_ms"),
+    ("baseline_e2e_latency_ms", "offload_e2e_latency_ms", "e2e_latency_ms"),
+    (
+        "baseline_output_tokens_per_second",
+        "offload_output_tokens_per_second",
+        "output_tokens_per_second",
+    ),
+    ("baseline_quality_score", "offload_quality_score", "quality_score"),
+    ("baseline_gpu_memory_peak_gb", "offload_gpu_memory_peak_gb", "gpu_memory_peak_gb"),
+]
 
 KV_OFFLOAD_COLUMNS = [
     "provider",
@@ -43,6 +60,7 @@ KV_OFFLOAD_COLUMNS = [
     "baseline_success_rate",
     "offload_success_rate",
     "offload_interpretation",
+    *repeated_comparison_columns(REPEATED_METRIC_SPECS),
 ]
 
 
@@ -182,6 +200,17 @@ def _aggregate_by_strategy(frame: pd.DataFrame) -> pd.DataFrame:
                 "missing_metrics": _missing_metrics(group),
             }
         )
+        add_group_metric_stats(
+            row,
+            group,
+            [
+                "ttft_ms",
+                "e2e_latency_ms",
+                "output_tokens_per_second",
+                "quality_score",
+                "gpu_memory_peak_gb",
+            ],
+        )
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -208,7 +237,7 @@ def _build_comparison_row(by_group: dict[str, Any], baseline: pd.Series, offload
     )
     offload_success_rate = _to_float(offload.get("success_rate"))
 
-    return {
+    row = {
         **by_group,
         "context_token_bucket": _nullable_int(by_group.get("context_token_bucket")),
         "baseline_strategy": str(baseline.get("strategy")),
@@ -242,6 +271,34 @@ def _build_comparison_row(by_group: dict[str, Any], baseline: pd.Series, offload
             missing_metrics=missing_metrics,
         ),
     }
+    for source_metric, baseline_prefix, candidate_prefix, effect_prefix in [
+        ("ttft_ms", "baseline_ttft_ms", "offload_ttft_ms", "ttft_ms"),
+        ("e2e_latency_ms", "baseline_e2e_latency_ms", "offload_e2e_latency_ms", "e2e_latency_ms"),
+        (
+            "output_tokens_per_second",
+            "baseline_output_tokens_per_second",
+            "offload_output_tokens_per_second",
+            "output_tokens_per_second",
+        ),
+        ("quality_score", "baseline_quality_score", "offload_quality_score", "quality_score"),
+        (
+            "gpu_memory_peak_gb",
+            "baseline_gpu_memory_peak_gb",
+            "offload_gpu_memory_peak_gb",
+            "gpu_memory_peak_gb",
+        ),
+    ]:
+        row.update(
+            repeated_comparison_fields(
+                baseline,
+                offload,
+                source_metric=source_metric,
+                baseline_prefix=baseline_prefix,
+                candidate_prefix=candidate_prefix,
+                effect_prefix=effect_prefix,
+            )
+        )
+    return row
 
 
 def _strategy_row(group: pd.DataFrame, strategy: str) -> pd.Series | None:

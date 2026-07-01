@@ -9,6 +9,8 @@ from typing import Any
 
 import pandas as pd
 
+from kvoptbench.analysis.statistics import flatten_metric_stats, mean_effect_size_from_stats
+
 TTFT_GROWTH_MULTIPLE = 2.0
 TTFT_GROWTH_MIN_DELTA_MS = 500.0
 THROUGHPUT_DROP_RATIO = 0.5
@@ -22,8 +24,10 @@ LONG_CONTEXT_COLUMNS = [
     "context_token_bucket",
     "pressure_level",
     "expected_pressure",
+    "ttft_ms_mean",
     "ttft_ms_p50",
     "ttft_ms_p95",
+    "e2e_latency_ms_mean",
     "e2e_latency_ms_p50",
     "e2e_latency_ms_p95",
     "input_tokens_per_second_mean",
@@ -33,6 +37,28 @@ LONG_CONTEXT_COLUMNS = [
     "requests",
     "success_rate",
     "error_rate",
+    "ttft_ms_count",
+    "ttft_ms_std",
+    "ttft_ms_ci95_low",
+    "ttft_ms_ci95_high",
+    "ttft_ms_stats_status",
+    "e2e_latency_ms_count",
+    "e2e_latency_ms_std",
+    "e2e_latency_ms_ci95_low",
+    "e2e_latency_ms_ci95_high",
+    "e2e_latency_ms_stats_status",
+    "input_tokens_per_second_count",
+    "input_tokens_per_second_std",
+    "input_tokens_per_second_ci95_low",
+    "input_tokens_per_second_ci95_high",
+    "input_tokens_per_second_stats_status",
+    "output_tokens_per_second_count",
+    "output_tokens_per_second_std",
+    "output_tokens_per_second_ci95_low",
+    "output_tokens_per_second_ci95_high",
+    "output_tokens_per_second_stats_status",
+    "ttft_ms_effect_size_vs_baseline",
+    "output_tokens_per_second_effect_size_vs_baseline",
 ]
 
 
@@ -132,6 +158,29 @@ def build_long_context_comparison(frame: pd.DataFrame) -> pd.DataFrame:
                 "error_rate": error_rate,
             }
         )
+        for metric in [
+            "ttft_ms",
+            "e2e_latency_ms",
+            "input_tokens_per_second",
+            "output_tokens_per_second",
+        ]:
+            stats = flatten_metric_stats(metric, group[metric])
+            row.update(
+                {
+                    key: value
+                    for key, value in stats.items()
+                    if key.endswith(
+                        (
+                            "_count",
+                            "_mean",
+                            "_std",
+                            "_ci95_low",
+                            "_ci95_high",
+                            "_stats_status",
+                        )
+                    )
+                }
+            )
         rows.append(row)
 
     result = pd.DataFrame(rows, columns=LONG_CONTEXT_COLUMNS)
@@ -177,6 +226,7 @@ def _classify_result_frame(frame: pd.DataFrame) -> pd.DataFrame:
         group = classified.loc[index].sort_values("context_token_bucket")
         baseline_ttft = _first_numeric(group["ttft_ms_p50"])
         baseline_output_tps = _first_numeric(group["output_tokens_per_second_mean"])
+        baseline = group.iloc[0]
         for row_index, row in group.iterrows():
             classified.loc[row_index, "pressure_classification"] = classify_pressure(
                 success_rate=_to_float(row.get("success_rate")),
@@ -184,6 +234,26 @@ def _classify_result_frame(frame: pd.DataFrame) -> pd.DataFrame:
                 baseline_ttft_ms=baseline_ttft,
                 output_tokens_per_second=_to_float(row.get("output_tokens_per_second_mean")),
                 baseline_output_tokens_per_second=baseline_output_tps,
+            )
+            classified.loc[row_index, "ttft_ms_effect_size_vs_baseline"] = (
+                mean_effect_size_from_stats(
+                    baseline_mean=baseline.get("ttft_ms_mean"),
+                    baseline_std=baseline.get("ttft_ms_std"),
+                    baseline_count=baseline.get("ttft_ms_count"),
+                    candidate_mean=row.get("ttft_ms_mean"),
+                    candidate_std=row.get("ttft_ms_std"),
+                    candidate_count=row.get("ttft_ms_count"),
+                )
+            )
+            classified.loc[row_index, "output_tokens_per_second_effect_size_vs_baseline"] = (
+                mean_effect_size_from_stats(
+                    baseline_mean=baseline.get("output_tokens_per_second_mean"),
+                    baseline_std=baseline.get("output_tokens_per_second_std"),
+                    baseline_count=baseline.get("output_tokens_per_second_count"),
+                    candidate_mean=row.get("output_tokens_per_second_mean"),
+                    candidate_std=row.get("output_tokens_per_second_std"),
+                    candidate_count=row.get("output_tokens_per_second_count"),
+                )
             )
     return classified[LONG_CONTEXT_COLUMNS]
 

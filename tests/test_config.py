@@ -122,6 +122,72 @@ def test_load_config_supports_environment_capture_fields(tmp_path: Path) -> None
     assert config.workload_sha256 == "workload-hash"
 
 
+def test_load_config_supports_live_telemetry_config(tmp_path: Path) -> None:
+    config_path = _write_config(
+        tmp_path / "telemetry.yaml",
+        "\n".join(
+            [
+                "telemetry:",
+                "  enabled: true",
+                "  output_dir: results/telemetry",
+                "  prometheus:",
+                "    - name: vllm",
+                "      url: http://127.0.0.1:8000/metrics",
+                "      timeout_seconds: 1.5",
+                "      scrape_phases: [before_run, during_run, after_run]",
+                "      scrape_interval_seconds: 0.25",
+                "      expected_metrics:",
+                "        - engine_reported_cache_hit_rate",
+                "      metric_aliases:",
+                "        vllm:prefix_cache_hit_rate: engine_reported_cache_hit_rate",
+                "  gpu:",
+                "    enabled: true",
+                "    provider: nvidia_smi",
+                "    sample_interval_seconds: 0.5",
+                "  lmcache:",
+                "    - name: lmcache",
+                "      url: http://127.0.0.1:9000/metrics",
+                "      format: prometheus",
+                "      expected_metrics:",
+                "        - lmcache_cache_hit_rate",
+            ]
+        ),
+    )
+
+    config = load_config(config_path)
+
+    assert config.telemetry is not None
+    assert config.telemetry.enabled is True
+    assert config.telemetry.output_dir == Path("results/telemetry")
+    assert config.telemetry.prometheus[0].name == "vllm"
+    assert config.telemetry.prometheus[0].scrape_phases == [
+        "before_run",
+        "during_run",
+        "after_run",
+    ]
+    assert config.telemetry.gpu is not None
+    assert config.telemetry.gpu.provider == "nvidia_smi"
+    assert config.telemetry.lmcache[0].expected_metrics == ["lmcache_cache_hit_rate"]
+
+
+def test_load_config_rejects_lmcache_json_source_without_path(tmp_path: Path) -> None:
+    config_path = _write_config(
+        tmp_path / "bad_lmcache.yaml",
+        "\n".join(
+            [
+                "telemetry:",
+                "  enabled: true",
+                "  lmcache:",
+                "    - name: lmcache",
+                "      format: jsonl",
+            ]
+        ),
+    )
+
+    with pytest.raises(ConfigError, match="path is required"):
+        load_config(config_path)
+
+
 def test_load_config_rejects_unknown_endpoint_type(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path / "bad_endpoint.yaml", "endpoint_type: custom_engine")
 

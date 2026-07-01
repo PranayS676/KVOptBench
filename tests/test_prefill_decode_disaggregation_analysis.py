@@ -74,6 +74,8 @@ def test_compare_disaggregation_results_computes_deltas_and_interpretation(tmp_p
     assert by_bucket[(32768, 32)]["disaggregation_interpretation"] == (
         "disaggregation_promising"
     )
+    assert "baseline_ttft_ms_stats_status" in frame.columns
+    assert "ttft_ms_effect_size" in frame.columns
     assert by_bucket[(4096, 512)]["disaggregation_interpretation"] == "decode_regression"
 
 

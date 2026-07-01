@@ -189,6 +189,7 @@ def generate_report(
     else:
         lines.append("| n/a | n/a | n/a | n/a |")
 
+    _append_telemetry_summary(lines, frame)
     _append_cache_comparison(lines, cache_frame)
     _append_prefix_overlap_sweep(lines, prefix_sweep_frame)
     _append_prefill_decode(lines, prefill_decode_frame)
@@ -367,6 +368,49 @@ def _ci(low, high) -> str:
     if pd.isna(low) or pd.isna(high):
         return "n/a"
     return f"{_fmt(low)} to {_fmt(high)}"
+
+
+def _append_telemetry_summary(lines: list[str], frame: pd.DataFrame) -> None:
+    telemetry_columns = {
+        "gpu_memory_peak_gb_mean",
+        "gpu_memory_used_gb_mean",
+        "cache_hit_rate_mean",
+    }
+    if not telemetry_columns.intersection(frame.columns):
+        return
+
+    lines.extend(
+        [
+            "",
+            "## Telemetry Summary",
+            "",
+            "| workload | strategy | GPU used GB | GPU peak GB | cache hit rate | missing telemetry |",
+            "|---|---|---:|---:|---:|---|",
+        ]
+    )
+    for _, row in frame.iterrows():
+        missing = _missing_telemetry_metrics(row.get("missing_metrics"))
+        lines.append(
+            f"| {row.get('workload', 'unknown')} | {row.get('strategy', 'unknown')} | "
+            f"{_fmt(row.get('gpu_memory_used_gb_mean'))} | "
+            f"{_fmt(row.get('gpu_memory_peak_gb_mean'))} | "
+            f"{_fmt(row.get('cache_hit_rate_mean'))} | "
+            f"{missing or 'none'} |"
+        )
+
+
+def _missing_telemetry_metrics(value) -> str:
+    if value is None or pd.isna(value):
+        return ""
+    telemetry_names = [
+        metric
+        for metric in str(value).split(";")
+        if metric.startswith("gpu_")
+        or metric.startswith("cache_")
+        or metric.startswith("lmcache_")
+        or "telemetry" in metric
+    ]
+    return ", ".join(f"`{metric}`" for metric in telemetry_names)
 
 
 def _read_strategy_advisor(strategy_input_path: str | Path | None):

@@ -36,6 +36,8 @@ Request-level JSONL rows include:
 
 - `metric_provenance`: per-metric source labels, measurement methods, availability,
   units, provider fields when applicable, and missing reasons.
+- `telemetry_run_id`, `telemetry_summary_path`, and `telemetry_snapshots_path` when
+  live telemetry is enabled.
 - `environment`: a reproducibility snapshot with Python version, platform, KVOptBench
   version, git commit, branch, dirty-state flag, and selected package versions.
 
@@ -110,6 +112,36 @@ Common sources:
 If GPU memory telemetry is missing, keep `gpu_memory_peak_gb` null and list
 `gpu_memory_peak_gb` in `missing_metrics`. This is especially important for KV
 quantization and KV offload decisions.
+
+Live telemetry collection writes `telemetry_snapshots.jsonl` and
+`telemetry_summary.json` under `results/telemetry/<run_id>/` by default. Request
+rows reference these files and copy run-level metrics such as `gpu_memory_peak_gb`
+into the normal metric fields when available. If a sampler times out, is missing,
+or does not expose an expected metric, keep the metric null and preserve the
+missing reason.
+
+## LMCache Telemetry
+
+LMCache telemetry is treated as backend evidence, not as KVOptBench-managed cache
+state. The first supported formats are:
+
+- Prometheus-compatible text endpoints.
+- structured JSON or JSONL metric exports.
+
+Normalized LMCache fields include:
+
+- `lmcache_cache_hits`
+- `lmcache_cache_misses`
+- `lmcache_cache_hit_rate`
+- `lmcache_cache_loads`
+- `lmcache_cache_stores`
+- `lmcache_kv_transfer_bytes`
+- `lmcache_kv_transfer_ms`
+- `lmcache_offload_ms`
+- `lmcache_load_ms`
+
+Unknown structured metrics should be preserved as telemetry records. Free-form log
+parsing should wait until there is a stable documented format.
 
 ## Imported Metrics
 

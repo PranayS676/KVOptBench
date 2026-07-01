@@ -19,7 +19,8 @@ from kvoptbench.runner.provenance import (
     healthcheck_failure_provenance,
     mark_requests_per_second_available,
 )
-from kvoptbench.schemas import EndpointHealth, RequestResult, WorkloadItem
+from kvoptbench.schemas import EndpointHealth, MetricProvenance, RequestResult, WorkloadItem
+from kvoptbench.telemetry.runtime import TelemetryRunSummary, build_telemetry_collector
 
 
 def load_workload(path: str | Path) -> list[WorkloadItem]:
@@ -45,10 +46,13 @@ async def run_experiment(config_path: str | Path) -> Path:
     config.output_file.parent.mkdir(parents=True, exist_ok=True)
     run_id = f"{int(time.time())}-{config.experiment_id}"
     client = OpenAICompatClient(config)
-    endpoint_health = await client.healthcheck()
     environment_metadata = _environment_metadata(config, config_path)
     environment = capture_environment(Path.cwd(), metadata=environment_metadata)
+    telemetry = build_telemetry_collector(config, run_id=run_id)
+    await telemetry.start()
+    endpoint_health = await client.healthcheck()
     if not endpoint_health.ok:
+        telemetry_summary = await telemetry.stop()
         results = [
             _failed_healthcheck_result(
                 run_id=run_id,
@@ -60,6 +64,7 @@ async def run_experiment(config_path: str | Path) -> Path:
             )
             for item in items
         ]
+        _apply_telemetry_to_results(results, telemetry_summary)
         _write_results(config.output_file, results, requests_per_second=None)
         return config.output_file
 
@@ -153,6 +158,8 @@ async def run_experiment(config_path: str | Path) -> Path:
 
     results = await asyncio.gather(*(run_one(index, item) for index, item in enumerate(items)))
     elapsed = time.perf_counter() - started
+    telemetry_summary = await telemetry.stop()
+    _apply_telemetry_to_results(results, telemetry_summary)
     rps = len(results) / elapsed if elapsed > 0 else None
     _write_results(config.output_file, results, requests_per_second=rps)
     return config.output_file
@@ -256,6 +263,107 @@ def _failure_missing_metrics(environment) -> list[str]:
     if environment is None or environment.gpu_count is None:
         missing.append("gpu_count")
     return sorted(set(missing))
+
+
+def _apply_telemetry_to_results(
+    results: list[RequestResult],
+    telemetry_summary: TelemetryRunSummary,
+) -> None:
+    if not telemetry_summary.enabled:
+        return
+    metrics = telemetry_summary.metrics
+    telemetry_missing = {item.metric: item.reason for item in telemetry_summary.missing_metrics}
+    for result in results:
+        _apply_gpu_telemetry(result, metrics, telemetry_missing, telemetry_summary)
+        _apply_cache_telemetry(result, metrics, telemetry_missing, telemetry_summary)
+        result.telemetry_run_id = telemetry_summary.run_id
+        result.telemetry_summary_path = telemetry_summary.summary_path
+        result.telemetry_snapshots_path = telemetry_summary.snapshots_path
+        result.metadata["telemetry"] = {
+            "run_id": telemetry_summary.run_id,
+            "summary_path": telemetry_summary.summary_path,
+            "snapshots_path": telemetry_summary.snapshots_path,
+            "snapshot_count": telemetry_summary.snapshot_count,
+            "sources": telemetry_summary.sources,
+            "missing_metrics": [
+                item.model_dump(mode="json") for item in telemetry_summary.missing_metrics
+            ],
+        }
+        result.missing_metrics = sorted(set(result.missing_metrics) - _available_metric_names(metrics))
+
+
+def _apply_gpu_telemetry(
+    result: RequestResult,
+    metrics: dict[str, float | None],
+    missing: dict[str, str],
+    telemetry_summary: TelemetryRunSummary,
+) -> None:
+    for metric in ["gpu_memory_used_gb", "gpu_memory_peak_gb"]:
+        value = metrics.get(metric)
+        if value is not None:
+            setattr(result, metric, value)
+            result.metric_provenance[metric] = MetricProvenance(
+                source_type="gpu_reported",
+                measurement_method="live GPU telemetry sampler",
+                unit="GB",
+                available=True,
+                provider_field=metric,
+                notes=f"Run-level telemetry summary: {telemetry_summary.summary_path}",
+            )
+        elif metric in missing:
+            result.metric_provenance[metric] = MetricProvenance(
+                source_type="gpu_reported",
+                measurement_method="live GPU telemetry sampler",
+                unit="GB",
+                available=False,
+                missing_reason=missing[metric],
+            )
+
+
+def _apply_cache_telemetry(
+    result: RequestResult,
+    metrics: dict[str, float | None],
+    missing: dict[str, str],
+    telemetry_summary: TelemetryRunSummary,
+) -> None:
+    cache_value = metrics.get("engine_reported_cache_hit_rate")
+    cache_field = "engine_reported_cache_hit_rate"
+    if cache_value is None:
+        cache_value = metrics.get("lmcache_cache_hit_rate")
+        cache_field = "lmcache_cache_hit_rate"
+    if cache_value is not None and result.cache_hit_rate is None:
+        result.cache_hit_rate = cache_value
+        result.cache_hit_proxy = cache_value
+        result.metric_provenance["cache_hit_rate"] = MetricProvenance(
+            source_type="engine_reported",
+            measurement_method="run-level telemetry adapter",
+            unit="ratio",
+            available=True,
+            provider_field=cache_field,
+            notes=f"Run-level telemetry summary: {telemetry_summary.summary_path}",
+        )
+        result.metric_provenance["cache_hit_proxy"] = MetricProvenance(
+            source_type="derived",
+            measurement_method="telemetry cache_hit_rate passthrough",
+            unit="ratio",
+            available=True,
+            provider_field=cache_field,
+        )
+    elif "cache_hit_rate" in missing:
+        result.metric_provenance["cache_hit_rate"] = MetricProvenance(
+            source_type="engine_reported",
+            measurement_method="run-level telemetry adapter",
+            unit="ratio",
+            available=False,
+            missing_reason=missing["cache_hit_rate"],
+        )
+
+
+def _available_metric_names(metrics: dict[str, float | None]) -> set[str]:
+    available = {metric for metric, value in metrics.items() if value is not None}
+    if "engine_reported_cache_hit_rate" in available or "lmcache_cache_hit_rate" in available:
+        available.update({"cache_hit_rate", "cache_hit_proxy"})
+    return available
 
 
 def _environment_metadata(config, config_path: str | Path | None) -> dict[str, Any]:

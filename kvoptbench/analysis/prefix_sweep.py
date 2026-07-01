@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 
 from kvoptbench.analysis.cache import cache_miss_penalty_ms, miss_penalty_per_1k_tokens
+from kvoptbench.analysis.statistics import flatten_metric_stats, mean_effect_size
 
 MEANINGFUL_CACHE_GAIN_MS = 25.0
 
@@ -27,6 +28,17 @@ PREFIX_SWEEP_COLUMNS = [
     "requests",
     "success_rate",
     "interpretation",
+    "cold_ttft_ms_count",
+    "cold_ttft_ms_std",
+    "cold_ttft_ms_ci95_low",
+    "cold_ttft_ms_ci95_high",
+    "cold_ttft_ms_stats_status",
+    "warm_ttft_ms_count",
+    "warm_ttft_ms_std",
+    "warm_ttft_ms_ci95_low",
+    "warm_ttft_ms_ci95_high",
+    "warm_ttft_ms_stats_status",
+    "ttft_ms_effect_size",
 ]
 
 
@@ -81,12 +93,16 @@ def build_prefix_sweep_comparison(frame: pd.DataFrame) -> pd.DataFrame:
         if not isinstance(keys, tuple):
             keys = (keys,)
         by_group = dict(zip(group_cols, keys, strict=True))
-        cold_ttft = _mean_ttft(group, "cold")
-        warm_ttft = _mean_ttft(group, "warm")
+        cold_values = group[group["cache_state"] == "cold"]["ttft_ms"].dropna()
+        warm_values = group[group["cache_state"] == "warm"]["ttft_ms"].dropna()
+        cold_ttft = _mean_ttft_values(cold_values)
+        warm_ttft = _mean_ttft_values(warm_values)
         cache_gain = cache_miss_penalty_ms(cold_ttft, warm_ttft)
         shared_prefix_tokens = int(group["shared_prefix_tokens"].max())
         requests = int(len(group))
         successes = int(group["success"].sum())
+        cold_stats = _renamed_stats("cold_ttft_ms", cold_values)
+        warm_stats = _renamed_stats("warm_ttft_ms", warm_values)
 
         rows.append(
             {
@@ -103,6 +119,9 @@ def build_prefix_sweep_comparison(frame: pd.DataFrame) -> pd.DataFrame:
                 "interpretation": interpret_prefix_sweep(
                     by_group["shared_prefix_ratio"], cache_gain
                 ),
+                **cold_stats,
+                **warm_stats,
+                "ttft_ms_effect_size": mean_effect_size(cold_values, warm_values),
             }
         )
 
@@ -166,11 +185,19 @@ def _shared_prefix_ratio(row) -> float | None:
     return _round_ratio(shared_prefix_tokens / target_input_tokens)
 
 
-def _mean_ttft(group: pd.DataFrame, cache_state: str) -> float | None:
-    values = group[group["cache_state"] == cache_state]["ttft_ms"].dropna()
+def _mean_ttft_values(values: pd.Series) -> float | None:
     if values.empty:
         return None
     return round(float(values.mean()), 3)
+
+
+def _renamed_stats(prefix: str, values: pd.Series) -> dict[str, object]:
+    stats = flatten_metric_stats(prefix, values)
+    return {
+        key: value
+        for key, value in stats.items()
+        if key.endswith(("_count", "_std", "_ci95_low", "_ci95_high", "_stats_status"))
+    }
 
 
 def _to_float(value) -> float | None:

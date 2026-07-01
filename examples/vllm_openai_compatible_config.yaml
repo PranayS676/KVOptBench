@@ -20,6 +20,29 @@ retries: 2
 retry_backoff_seconds: 0.5
 capture_response_headers: true
 stream: true
+telemetry:
+  enabled: false
+  output_dir: results/telemetry
+  prometheus:
+    - name: vllm
+      url: http://127.0.0.1:8000/metrics
+      timeout_seconds: 2
+      scrape_phases: [before_run, during_run, after_run]
+      scrape_interval_seconds: 1
+      expected_metrics:
+        - engine_reported_cache_hit_rate
+      metric_aliases:
+        vllm:prefix_cache_hit_rate: engine_reported_cache_hit_rate
+  gpu:
+    enabled: true
+    provider: nvidia_smi
+    sample_interval_seconds: 1
+  lmcache:
+    - name: lmcache
+      url: http://127.0.0.1:9000/metrics
+      format: prometheus
+      expected_metrics:
+        - lmcache_cache_hit_rate
 endpoint_metadata:
   note: Existing vLLM OpenAI-compatible endpoint. KVOptBench does not start the server.
 metadata:

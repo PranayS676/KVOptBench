@@ -6,7 +6,10 @@ import pandas as pd
 from kvoptbench.analysis.statistics import (
     aggregate_repeated_results,
     compare_repeated_results,
+    flatten_metric_stats,
     load_results,
+    mean_effect_size,
+    mean_effect_size_from_stats,
     percent_delta,
     summarize_metric_values,
 )
@@ -69,6 +72,30 @@ def test_confidence_interval_uses_normal_approximation_for_repeated_trials() -> 
     assert summary["std"] == 10.0
     assert summary["ci95_low"] == 98.684
     assert summary["ci95_high"] == 121.316
+
+
+def test_flatten_metric_stats_adds_status_columns() -> None:
+    stats = flatten_metric_stats("baseline_ttft_ms", [100.0, 110.0, 120.0])
+
+    assert stats["baseline_ttft_ms_count"] == 3
+    assert stats["baseline_ttft_ms_ci95_low"] == 98.684
+    assert stats["baseline_ttft_ms_stats_status"] == "ok"
+    assert flatten_metric_stats("metric", [1.0])["metric_stats_status"] == (
+        "insufficient_repetitions"
+    )
+
+
+def test_mean_effect_size_requires_repeated_baseline_and_candidate_values() -> None:
+    assert mean_effect_size([100.0, 110.0, 120.0], [80.0, 90.0, 100.0]) == -2.0
+    assert mean_effect_size([100.0], [80.0, 90.0]) is None
+    assert mean_effect_size_from_stats(
+        baseline_mean=110.0,
+        baseline_std=10.0,
+        baseline_count=3,
+        candidate_mean=90.0,
+        candidate_std=10.0,
+        candidate_count=3,
+    ) == -2.0
 
 
 def test_percent_delta_direction_candidate_relative_to_baseline() -> None:
