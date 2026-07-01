@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import csv
 import re
+import subprocess
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +39,8 @@ _PEAK_ALIASES = {
 }
 _GPU_MEMORY_FIELDS = ["gpu_memory_used_gb", "gpu_memory_peak_gb"]
 _MIB_RE = re.compile(r"(?P<value>\d+(?:\.\d+)?)\s*MiB", re.IGNORECASE)
+GpuSampleSource = str | Path | dict[str, Any] | list[dict[str, Any]]
+GpuSampleProvider = Callable[[], GpuSampleSource | None]
 
 
 def collect_gpu_metrics() -> dict:
@@ -44,6 +49,103 @@ def collect_gpu_metrics() -> dict:
         "gpu_memory_peak_gb": None,
         "reason": "GPU telemetry is not collected in local mock mode.",
     }
+
+
+class GpuSampler:
+    """Run-window GPU sampler that is testable with fake sample providers."""
+
+    def __init__(
+        self,
+        sample_provider: GpuSampleProvider | None = None,
+        *,
+        source_type: str = "nvidia_smi",
+        expected_metrics: list[str] | tuple[str, ...] | None = None,
+        sample_interval_seconds: float | None = None,
+    ) -> None:
+        self.sample_provider = sample_provider or nvidia_smi_sample_provider
+        self.source_type = source_type
+        self.expected_metrics = list(expected_metrics or _GPU_MEMORY_FIELDS)
+        self.sample_interval_seconds = sample_interval_seconds
+        self._started_at: str | None = None
+        self._samples: list[dict[str, Any]] = []
+        self._missing_metrics: list[MissingMetric] = []
+
+    def start(self) -> None:
+        """Mark the start of a benchmark sampling window."""
+        self._started_at = _utc_now()
+        self._samples = []
+        self._missing_metrics = []
+
+    def sample_once(self) -> TelemetrySnapshot:
+        """Collect one provider sample and normalize it without requiring a GPU in tests."""
+        if self._started_at is None:
+            self.start()
+        try:
+            source = self.sample_provider()
+        except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+            snapshot = self._unavailable_snapshot(f"GPU sample provider failed: {exc}")
+            self._missing_metrics.extend(snapshot.missing_metrics)
+            return snapshot
+
+        if source is None:
+            snapshot = self._unavailable_snapshot("GPU sample provider returned no sample.")
+            self._missing_metrics.extend(snapshot.missing_metrics)
+            return snapshot
+
+        snapshot = normalize_gpu_metrics(source)
+        self._samples.extend(snapshot.samples)
+        self._missing_metrics.extend(snapshot.missing_metrics)
+        return snapshot
+
+    def stop(self) -> TelemetrySnapshot:
+        """Summarize all samples collected during the benchmark window."""
+        started_at = self._started_at or _utc_now()
+        finished_at = _utc_now()
+        if not self._samples:
+            snapshot = self._unavailable_snapshot(
+                "No GPU telemetry samples were collected during the benchmark window."
+            )
+        else:
+            snapshot = normalize_gpu_metrics(self._samples)
+            snapshot.missing_metrics = _dedupe_missing_metrics(
+                [*snapshot.missing_metrics, *self._missing_metrics]
+            )
+        snapshot.source_type = self.source_type
+        snapshot.metadata.update(
+            {
+                "sample_started_at": started_at,
+                "sample_finished_at": finished_at,
+                "sample_interval_seconds": self.sample_interval_seconds,
+            }
+        )
+        return snapshot
+
+    def _unavailable_snapshot(self, reason: str) -> TelemetrySnapshot:
+        return TelemetrySnapshot(
+            metrics={metric: None for metric in self.expected_metrics},
+            missing_metrics=[
+                MissingMetric(metric=metric, reason=reason, source=self.source_type)
+                for metric in self.expected_metrics
+            ],
+            source_type=self.source_type,
+            samples=[],
+        )
+
+
+def nvidia_smi_sample_provider(timeout_seconds: float = 2.0) -> str:
+    """Return live ``nvidia-smi`` CSV output for optional runtime use."""
+    completed = subprocess.run(
+        [
+            "nvidia-smi",
+            "--query-gpu=timestamp,index,name,memory.used,memory.total",
+            "--format=csv",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds,
+    )
+    return completed.stdout
 
 
 def normalize_gpu_metrics(source: str | Path | dict[str, Any] | list[dict[str, Any]]) -> TelemetrySnapshot:
@@ -184,4 +286,20 @@ def _convert_to_gb(value: float, unit: str) -> float:
 
 def _round_gb(value: float) -> float:
     return round(value, 4)
+
+
+def _dedupe_missing_metrics(missing_metrics: list[MissingMetric]) -> list[MissingMetric]:
+    seen: set[tuple[str, str, str | None]] = set()
+    deduped: list[MissingMetric] = []
+    for missing in missing_metrics:
+        key = (missing.metric, missing.reason, missing.source)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(missing)
+    return deduped
+
+
+def _utc_now() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 

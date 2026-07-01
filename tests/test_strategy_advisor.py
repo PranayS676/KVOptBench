@@ -50,8 +50,10 @@ def test_strategy_advisor_recommends_prefix_caching_with_threshold_evidence(tmp_
 
     recommendation = _by_strategy(report, "prefix_caching")
     assert recommendation.decision == "recommend"
-    assert recommendation.confidence == "high"
+    assert recommendation.confidence == "low"
     assert recommendation.rank == 1
+    assert recommendation.workload_profile == "long_context_qa"
+    assert recommendation.quality_gate_status in {"warn", "unknown"}
     assert any("control-adjusted cache gain" in item.message for item in recommendation.evidence)
     assert any("shared-prefix ratio" in item.message for item in recommendation.evidence)
 
@@ -88,6 +90,14 @@ def test_strategy_advisor_flags_kv_offload_missing_memory_as_inconclusive(tmp_pa
     assert recommendation.confidence == "low"
     assert any("memory telemetry" in caveat for caveat in recommendation.caveats)
     assert any("GPU memory" in item for item in recommendation.next_experiments)
+    assert recommendation.next_experiment_plans
+    assert recommendation.next_experiment_plans[0].command.startswith(
+        "kvoptbench kv-offload-plan"
+    )
+    assert "<workload_file>" in recommendation.next_experiment_plans[0].command
+    assert recommendation.next_experiment_plans[0].options["workload_profile"] == (
+        "long_context_qa"
+    )
 
 
 def test_strategy_advisor_recommends_speculative_decoding_when_decode_metrics_improve(
@@ -122,7 +132,8 @@ def test_strategy_advisor_recommends_speculative_decoding_when_decode_metrics_im
 
     recommendation = _by_strategy(report, "speculative_decoding")
     assert recommendation.decision == "recommend"
-    assert recommendation.confidence == "medium"
+    assert recommendation.confidence == "low"
+    assert recommendation.workload_profile == "decode_heavy"
     assert any("throughput improved" in item.message for item in recommendation.evidence)
     assert any("acceptance" in caveat for caveat in recommendation.caveats)
 
@@ -158,10 +169,11 @@ def test_strategy_advisor_downgrades_confidence_for_missing_required_telemetry(
 
     recommendation = _by_strategy(report, "kv_quantization")
     assert recommendation.decision == "recommend"
-    assert recommendation.confidence == "medium"
+    assert recommendation.confidence == "low"
     assert recommendation.confidence_score < 0.8
     assert any("missing telemetry" in reason for reason in recommendation.confidence_reasons)
     assert any("GPU memory telemetry" in item for item in recommendation.next_experiment_priority)
+    assert "timeout_rate" in recommendation.missing_required_metrics
 
 
 def test_strategy_advisor_downgrades_confidence_for_tiny_sample_support(
@@ -195,7 +207,7 @@ def test_strategy_advisor_downgrades_confidence_for_tiny_sample_support(
 
     recommendation = _by_strategy(report, "kv_quantization")
     assert recommendation.decision == "recommend"
-    assert recommendation.confidence == "medium"
+    assert recommendation.confidence == "low"
     assert recommendation.confidence_score < 0.8
     assert any("sample support" in reason for reason in recommendation.confidence_reasons)
     assert any("Repeat trials" in item for item in recommendation.next_experiment_priority)
@@ -320,7 +332,7 @@ def test_strategy_advisor_rejects_disaggregation_decode_regression(tmp_path: Pat
 
     recommendation = _by_strategy(report, "prefill_decode_disaggregation")
     assert recommendation.decision == "do_not_recommend"
-    assert recommendation.confidence == "high"
+    assert recommendation.confidence == "medium"
     assert any("decode latency regressed" in item.message for item in recommendation.evidence)
 
 
@@ -334,6 +346,86 @@ def test_strategy_advisor_serializes_json_and_markdown(tmp_path: Path) -> None:
     assert json.loads(json.dumps(payload))["overall_recommendation"] == "needs_more_data"
     assert "# Strategy Advisor" in markdown
     assert "Needs More Data" in markdown
+    assert "Next experiment command plans:" in markdown
+
+
+def test_strategy_advisor_workload_gate_keeps_rag_performance_only_win_as_consider(
+    tmp_path: Path,
+) -> None:
+    summary = _write_summary(tmp_path, provider="local", requests=40)
+    kv_quant = tmp_path / "kv_quantization.csv"
+    pd.DataFrame(
+        [
+            {
+                "provider": "local",
+                "engine": "vllm",
+                "model_id": "model",
+                "workload": "rag_faithfulness",
+                "context_token_bucket": 4096,
+                "baseline_strategy": "baseline",
+                "quantized_strategy": "kv_fp8",
+                "e2e_delta_pct": -10.0,
+                "throughput_delta_pct": 18.0,
+                "memory_delta_pct": -20.0,
+                "quality_delta": None,
+                "missing_metrics": "",
+                "requests": 40,
+                "repeated_trials": 2,
+                "quantized_success_rate": 1.0,
+                "quantization_interpretation": "quantization_promising",
+            }
+        ]
+    ).to_csv(kv_quant, index=False)
+
+    report = build_strategy_advisor_report(summary_path=summary, kv_quant_input_path=kv_quant)
+
+    recommendation = _by_strategy(report, "kv_quantization")
+    assert recommendation.workload_profile == "rag"
+    assert recommendation.decision == "consider"
+    assert recommendation.quality_gate_status == "warn"
+    assert any("partial coverage" in reason for reason in recommendation.confidence_reasons)
+
+
+def test_strategy_advisor_inconclusive_recommendations_include_command_plans(
+    tmp_path: Path,
+) -> None:
+    summary = _write_summary(tmp_path, provider="local", requests=8)
+    speculative = tmp_path / "speculative_decoding.csv"
+    pd.DataFrame(
+        [
+            {
+                "provider": "local",
+                "engine": "vllm",
+                "model_id": "model",
+                "workload": "decode_heavy",
+                "baseline_strategy": "baseline",
+                "speculative_strategy": "speculative_decoding",
+                "missing_metrics": "output_tokens_per_second;error_rate",
+                "requests": 8,
+                "speculative_decoding_interpretation": "no_observed_benefit",
+            }
+        ]
+    ).to_csv(speculative, index=False)
+
+    report = build_strategy_advisor_report(
+        summary_path=summary,
+        spec_decoding_input_path=speculative,
+    )
+
+    recommendation = _by_strategy(report, "speculative_decoding")
+    assert recommendation.decision == "inconclusive"
+    assert recommendation.next_experiment_plans
+    plan = recommendation.next_experiment_plans[0]
+    assert plan.reason == "missing_required_metrics"
+    assert plan.command.startswith("kvoptbench spec-decoding-plan")
+    assert "<workload_file>" in plan.command
+    assert plan.options["required_metrics"] == [
+        "output_tokens_per_second",
+        "latency_ms",
+        "error_rate",
+        "output_tokens",
+    ]
+    assert any(item.startswith("Command template: kvoptbench") for item in recommendation.next_experiments)
 
 
 def test_strategy_advisor_markdown_renders_confidence_rationale(tmp_path: Path) -> None:

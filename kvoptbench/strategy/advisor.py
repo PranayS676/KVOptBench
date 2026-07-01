@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import pandas as pd
 from pydantic import BaseModel, Field
@@ -14,6 +14,7 @@ from kvoptbench.strategy.report import render_strategy_advisor_markdown
 
 Decision = Literal["recommend", "consider", "do_not_recommend", "inconclusive", "needs_more_data"]
 Confidence = Literal["high", "medium", "low"]
+QualityGateStatus = Literal["pass", "warn", "fail", "unknown"]
 
 MEANINGFUL_CACHE_GAIN_MS = 25.0
 MEANINGFUL_THROUGHPUT_DELTA_PCT = 5.0
@@ -21,6 +22,31 @@ MEANINGFUL_LATENCY_DELTA_PCT = -5.0
 MEANINGFUL_MEMORY_DELTA_PCT = -5.0
 QUALITY_REGRESSION_THRESHOLD = -0.05
 TINY_SAMPLE_SUPPORT = 4
+
+
+class WorkloadThreshold(BaseModel):
+    """Deterministic threshold policy for one workload profile."""
+
+    workload_profile: str
+    primary_focus: str
+    minimum_samples: int
+    minimum_repeated_trials: int
+    required_quality_evaluators: list[str] = Field(default_factory=list)
+    required_metrics: list[str] = Field(default_factory=list)
+    recommended_metrics: list[str] = Field(default_factory=list)
+    threshold_posture: str
+    blocking_quality_regression: bool = True
+
+
+class NextExperimentPlan(BaseModel):
+    """Concrete command template and unresolved bindings for a follow-up experiment."""
+
+    needed: bool = True
+    reason: str
+    objective: str
+    command: str
+    required_bindings: dict[str, str] = Field(default_factory=dict)
+    options: dict[str, Any] = Field(default_factory=dict)
 
 
 class EvidenceItem(BaseModel):
@@ -45,6 +71,12 @@ class StrategyRecommendation(BaseModel):
     caveats: list[str] = Field(default_factory=list)
     next_experiments: list[str] = Field(default_factory=list)
     next_experiment_priority: list[str] = Field(default_factory=list)
+    next_experiment_plans: list[NextExperimentPlan] = Field(default_factory=list)
+    workload_profile: str | None = None
+    workload_threshold: WorkloadThreshold | None = None
+    quality_gate_status: QualityGateStatus | None = None
+    missing_required_metrics: list[str] = Field(default_factory=list)
+    missing_recommended_metrics: list[str] = Field(default_factory=list)
     quality_guardrail: str | None = None
     source: str
 
@@ -69,6 +101,154 @@ class StrategyAdvisorInputs(BaseModel):
     kv_offload_input_path: Path | None = None
     spec_decoding_input_path: Path | None = None
     disagg_input_path: Path | None = None
+
+
+WORKLOAD_THRESHOLDS: dict[str, WorkloadThreshold] = {
+    "rag": WorkloadThreshold(
+        workload_profile="rag",
+        primary_focus="answer quality, retrieval-sensitive latency, and cost",
+        minimum_samples=30,
+        minimum_repeated_trials=2,
+        required_quality_evaluators=["answer_relevance", "factuality"],
+        required_metrics=["latency_ms", "error_rate", "input_tokens", "output_tokens"],
+        recommended_metrics=["cost_per_1k_tokens", "cache_hit_rate"],
+        threshold_posture=(
+            "favor quality preservation; latency or cost wins must not override answer regressions"
+        ),
+    ),
+    "long_context_qa": WorkloadThreshold(
+        workload_profile="long_context_qa",
+        primary_focus="long-input reliability, TTFT, and end-to-end latency",
+        minimum_samples=20,
+        minimum_repeated_trials=2,
+        required_quality_evaluators=["answer_correctness", "factuality"],
+        required_metrics=[
+            "input_tokens",
+            "output_tokens",
+            "ttft_ms",
+            "e2e_latency_ms",
+            "timeout_rate",
+        ],
+        recommended_metrics=["cache_hit_rate", "gpu_memory_peak_gb"],
+        threshold_posture="require stronger sample coverage because prompt length variance is high",
+    ),
+    "tool_calling": WorkloadThreshold(
+        workload_profile="tool_calling",
+        primary_focus="valid tool selection, argument correctness, and latency",
+        minimum_samples=30,
+        minimum_repeated_trials=2,
+        required_quality_evaluators=[
+            "tool_selection_validity",
+            "argument_validity",
+            "task_success",
+        ],
+        required_metrics=["latency_ms", "error_rate", "invalid_tool_call_rate"],
+        recommended_metrics=["retry_rate", "input_tokens", "output_tokens"],
+        threshold_posture="block confident wins if tool correctness drops materially",
+    ),
+    "agentic_coding": WorkloadThreshold(
+        workload_profile="agentic_coding",
+        primary_focus="task success, patch quality, latency, and cost",
+        minimum_samples=10,
+        minimum_repeated_trials=2,
+        required_quality_evaluators=["task_success", "test_outcome"],
+        required_metrics=[
+            "latency_ms",
+            "error_rate",
+            "input_tokens",
+            "output_tokens",
+            "cost_per_1k_tokens",
+        ],
+        recommended_metrics=["retry_rate"],
+        threshold_posture="treat quality evidence as mandatory; performance-only wins are advisory",
+    ),
+    "decode_heavy": WorkloadThreshold(
+        workload_profile="decode_heavy",
+        primary_focus="output throughput, latency stability, and error rate",
+        minimum_samples=20,
+        minimum_repeated_trials=2,
+        required_quality_evaluators=["output_validity"],
+        required_metrics=[
+            "output_tokens_per_second",
+            "latency_ms",
+            "error_rate",
+            "output_tokens",
+        ],
+        recommended_metrics=["speculative_acceptance_rate", "input_tokens"],
+        threshold_posture="throughput can lead only when error-rate and quality gates pass",
+    ),
+}
+
+WORKLOAD_PROFILE_ALIASES = {
+    "rag": "rag",
+    "rag_faithfulness": "rag",
+    "long_context_qa": "long_context_qa",
+    "long_context_pressure": "long_context_qa",
+    "long_context_needle": "long_context_qa",
+    "needle": "long_context_qa",
+    "shared_prefix": "long_context_qa",
+    "random_prefix": "long_context_qa",
+    "shared_prefix_long_doc": "long_context_qa",
+    "random_prefix_control": "long_context_qa",
+    "partial_prefix": "long_context_qa",
+    "partial_prefix_reuse": "long_context_qa",
+    "tool_calling": "tool_calling",
+    "agentic_coding": "agentic_coding",
+    "decode_heavy": "decode_heavy",
+    "decode_heavy_generation": "decode_heavy",
+    "prefill_decode_grid": "decode_heavy",
+}
+
+METRIC_ALIASES: dict[str, tuple[str, ...]] = {
+    "latency_ms": (
+        "latency_ms",
+        "e2e_latency_ms",
+        "e2e_delta_pct",
+        "ttft_ms",
+        "ttft_delta_pct",
+    ),
+    "e2e_latency_ms": ("e2e_latency_ms", "latency_ms", "e2e_delta_pct"),
+    "ttft_ms": ("ttft_ms", "time_to_first_token_ms", "ttft_delta_pct"),
+    "error_rate": ("error_rate", "timeout_rate", "success_rate"),
+    "timeout_rate": ("timeout_rate", "timeout_count"),
+    "input_tokens": ("input_tokens", "target_input_tokens", "input_token_bucket", "context_token_bucket"),
+    "output_tokens": ("output_tokens", "target_output_tokens", "output_token_bucket"),
+    "output_tokens_per_second": (
+        "output_tokens_per_second",
+        "tokens_per_second",
+        "throughput_delta_pct",
+    ),
+    "cost_per_1k_tokens": ("cost_per_1k_tokens", "cost_delta_pct"),
+    "cache_hit_rate": ("cache_hit_rate", "cache_hit_proxy", "cache_hit_delta_pct"),
+    "gpu_memory_peak_gb": ("gpu_memory_peak_gb", "memory_delta_pct"),
+    "invalid_tool_call_rate": (
+        "invalid_tool_call_rate",
+        "tool_call_validity_rate",
+        "tool_success_rate",
+    ),
+    "retry_rate": ("retry_rate", "retry_count"),
+    "speculative_acceptance_rate": ("speculative_acceptance_rate",),
+}
+
+QUALITY_EVALUATOR_ALIASES: dict[str, tuple[str, ...]] = {
+    "answer_relevance": ("answer_relevance", "rag_placeholder", "rag"),
+    "factuality": ("factuality", "faithfulness", "rag_placeholder"),
+    "answer_correctness": (
+        "answer_correctness",
+        "contains_expected",
+        "needle",
+        "exact_match",
+    ),
+    "tool_selection_validity": ("tool_calling", "tool_selection_validity"),
+    "argument_validity": ("tool_calling", "argument_validity"),
+    "task_success": (
+        "task_success",
+        "tool_calling",
+        "llm_judge_placeholder",
+    ),
+    "test_outcome": ("test_outcome", "unit_test_result", "llm_judge_placeholder"),
+    "output_validity": ("output_validity", "contains_expected"),
+}
 
 
 def build_strategy_advisor_report(
@@ -670,6 +850,14 @@ def _apply_confidence_model(
         reasons.append(f"Sample support: {sample_count} requests/trials were reported.")
 
     score = _apply_quality_guardrail(recommendation, evidence_rows, reasons, priority, score)
+    score = _apply_workload_thresholds(
+        recommendation,
+        evidence_rows=evidence_rows,
+        summary_rows=summary_rows,
+        reasons=reasons,
+        priority=priority,
+        score=score,
+    )
 
     if _has_mock_source(context_rows):
         score -= 0.05
@@ -701,6 +889,7 @@ def _apply_confidence_model(
     recommendation.confidence = _confidence_from_score(recommendation.confidence_score)
     recommendation.confidence_reasons = reasons
     recommendation.next_experiment_priority = priority
+    _ensure_next_experiment_plan(recommendation)
     return recommendation
 
 
@@ -708,6 +897,138 @@ def _base_confidence_score(recommendation: StrategyRecommendation) -> float:
     if recommendation.decision == "needs_more_data":
         return 0.20
     return {"high": 0.95, "medium": 0.70, "low": 0.40}[recommendation.confidence]
+
+
+def _apply_workload_thresholds(
+    recommendation: StrategyRecommendation,
+    *,
+    evidence_rows: list[pd.Series],
+    summary_rows: list[pd.Series],
+    reasons: list[str],
+    priority: list[str],
+    score: float,
+) -> float:
+    """Apply workload-profile evidence gates while preserving strategy decisions."""
+    profile = _infer_workload_profile(recommendation, evidence_rows, summary_rows)
+    if profile is None:
+        return score
+
+    threshold = WORKLOAD_THRESHOLDS[profile]
+    recommendation.workload_profile = profile
+    recommendation.workload_threshold = threshold
+    context_rows = [*evidence_rows, *summary_rows]
+
+    missing_required = _missing_threshold_metrics(threshold.required_metrics, context_rows)
+    missing_recommended = _missing_threshold_metrics(threshold.recommended_metrics, context_rows)
+    recommendation.missing_required_metrics = missing_required
+    recommendation.missing_recommended_metrics = missing_recommended
+
+    if missing_required:
+        score -= min(0.05 * len(missing_required), 0.25)
+        reasons.append(
+            "Workload threshold missing required metrics for "
+            f"{profile}: {', '.join(missing_required)}."
+        )
+        _append_unique(
+            priority,
+            "Capture workload-required metrics before relying on this recommendation.",
+        )
+    else:
+        reasons.append(f"Workload threshold metrics present for {profile}.")
+
+    if missing_recommended:
+        score -= min(0.02 * len(missing_recommended), 0.10)
+        reasons.append(
+            "Workload threshold missing recommended metrics for "
+            f"{profile}: {', '.join(missing_recommended)}."
+        )
+
+    threshold_sample_count = _sample_support_count(context_rows)
+    if threshold_sample_count is None:
+        score -= 0.08
+        reasons.append(
+            f"Workload threshold sample support is unknown for {profile}; "
+            f"target at least {threshold.minimum_samples} samples."
+        )
+    elif threshold_sample_count < threshold.minimum_samples:
+        score -= 0.12
+        reasons.append(
+            f"Workload threshold sample support is below target for {profile}: "
+            f"{threshold_sample_count} observed, {threshold.minimum_samples} target."
+        )
+        _append_unique(
+            priority,
+            f"Scale the follow-up {profile} run to at least "
+            f"{threshold.minimum_samples} samples.",
+        )
+    else:
+        reasons.append(
+            f"Workload threshold sample support met for {profile}: "
+            f"{threshold_sample_count} observed."
+        )
+
+    repeated_trials = _trial_support_count(context_rows)
+    if repeated_trials is None:
+        score -= 0.04
+        reasons.append(
+            f"Repeated-trial support is unknown for {profile}; "
+            f"target at least {threshold.minimum_repeated_trials} trials."
+        )
+    elif repeated_trials < threshold.minimum_repeated_trials:
+        score -= 0.08
+        reasons.append(
+            f"Repeated-trial support is below target for {profile}: "
+            f"{repeated_trials} observed, {threshold.minimum_repeated_trials} target."
+        )
+        _append_unique(
+            priority,
+            f"Repeat each compared {profile} condition at least "
+            f"{threshold.minimum_repeated_trials} times.",
+        )
+
+    gate_status = _quality_gate_status(recommendation, threshold, context_rows)
+    recommendation.quality_gate_status = gate_status
+    if gate_status == "fail":
+        score -= 0.35
+        _append_unique(
+            recommendation.caveats,
+            f"{profile} quality gate failed; do not promote performance-only wins.",
+        )
+        reasons.append(f"Workload quality gate failed for {profile}.")
+        if threshold.blocking_quality_regression and recommendation.decision in {
+            "recommend",
+            "consider",
+        }:
+            recommendation.decision = "do_not_recommend"
+            recommendation.score = min(recommendation.score, -2.0)
+    elif gate_status == "unknown":
+        score -= 0.12
+        _append_unique(
+            recommendation.caveats,
+            f"{profile} quality gate is unknown; required evaluator evidence is missing.",
+        )
+        reasons.append(f"Workload quality gate is unknown for {profile}.")
+        _append_unique(
+            priority,
+            f"Add required {profile} evaluator coverage: "
+            + ", ".join(threshold.required_quality_evaluators)
+            + ".",
+        )
+        if profile in {"rag", "tool_calling", "agentic_coding"} and recommendation.decision == "recommend":
+            recommendation.decision = "consider"
+    elif gate_status == "warn":
+        score -= 0.06
+        reasons.append(f"Workload quality gate has partial coverage for {profile}.")
+        _append_unique(
+            priority,
+            f"Strengthen {profile} evaluator coverage before treating this as a confident win.",
+        )
+        if profile in {"rag", "tool_calling", "agentic_coding"} and recommendation.decision == "recommend":
+            recommendation.decision = "consider"
+    else:
+        reasons.append(f"Workload quality gate passed for {profile}.")
+
+    return score
 
 
 def _frame_rows(frames: list[pd.DataFrame | None]) -> list[pd.Series]:
@@ -748,6 +1069,318 @@ def _sample_support_count(rows: list[pd.Series]) -> int | None:
     if not counts:
         return None
     return min(counts)
+
+
+def _trial_support_count(rows: list[pd.Series]) -> int | None:
+    columns = (
+        "repeated_trials",
+        "trial_count",
+        "repetition_count",
+        "repeat_count",
+        "trials",
+    )
+    counts: list[int] = []
+    for row in rows:
+        for column in columns:
+            if column not in row.index:
+                continue
+            value = _to_float(row.get(column))
+            if value is not None and value > 0:
+                counts.append(int(value))
+    if not counts:
+        return None
+    return min(counts)
+
+
+def _infer_workload_profile(
+    recommendation: StrategyRecommendation,
+    evidence_rows: list[pd.Series],
+    summary_rows: list[pd.Series],
+) -> str | None:
+    for row in evidence_rows:
+        for column in ("workload_profile", "workload", "category"):
+            if column not in row.index:
+                continue
+            profile = _canonical_workload_profile(row.get(column))
+            if profile is not None:
+                return profile
+
+    strategy_default = {
+        "prefix_caching": "long_context_qa",
+        "kv_quantization": "long_context_qa",
+        "kv_offload": "long_context_qa",
+        "speculative_decoding": "decode_heavy",
+        "prefill_decode_disaggregation": "decode_heavy",
+        "long_context_memory_pressure": "long_context_qa",
+    }.get(recommendation.strategy)
+    if strategy_default is not None:
+        return strategy_default
+
+    for row in summary_rows:
+        for column in ("workload_profile", "workload", "category"):
+            if column not in row.index:
+                continue
+            profile = _canonical_workload_profile(row.get(column))
+            if profile is not None:
+                return profile
+
+    return None
+
+
+def _canonical_workload_profile(value) -> str | None:
+    cleaned = _clean_string(value).lower()
+    if not cleaned:
+        return None
+    return WORKLOAD_PROFILE_ALIASES.get(cleaned)
+
+
+def _missing_threshold_metrics(metrics: list[str], rows: list[pd.Series]) -> list[str]:
+    return [metric for metric in metrics if not _has_metric_signal(metric, rows)]
+
+
+def _has_metric_signal(metric_id: str, rows: list[pd.Series]) -> bool:
+    aliases = METRIC_ALIASES.get(metric_id, (metric_id,))
+    for row in rows:
+        missing = {item.lower() for item in _missing_metric_names(row)}
+        if metric_id.lower() in missing or any(alias.lower() in missing for alias in aliases):
+            continue
+        for alias in aliases:
+            if alias in row.index and _has_observed_value(row.get(alias)):
+                return True
+    return False
+
+
+def _has_observed_value(value) -> bool:
+    if value is None:
+        return False
+    try:
+        if pd.isna(value):
+            return False
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, str) and not value.strip():
+        return False
+    return True
+
+
+def _quality_gate_status(
+    recommendation: StrategyRecommendation,
+    threshold: WorkloadThreshold,
+    rows: list[pd.Series],
+) -> QualityGateStatus:
+    if recommendation.quality_guardrail == "failed":
+        return "fail"
+    if _quality_regression_detected(rows):
+        return "fail"
+
+    present_evaluators = _present_quality_evaluators(threshold, rows)
+    has_quality_delta = _min_numeric_row_value(rows, "quality_delta") is not None
+    has_quality_score = _min_numeric_row_value(rows, "quality_score_mean") is not None
+
+    if threshold.required_quality_evaluators:
+        if present_evaluators:
+            if len(present_evaluators) >= len(threshold.required_quality_evaluators):
+                return "pass"
+            return "warn"
+        if recommendation.quality_guardrail == "passed" or has_quality_delta or has_quality_score:
+            return "warn"
+        return "unknown"
+
+    if recommendation.quality_guardrail == "passed" or has_quality_delta or has_quality_score:
+        return "pass"
+    return "unknown"
+
+
+def _quality_regression_detected(rows: list[pd.Series]) -> bool:
+    quality_delta = _min_numeric_row_value(rows, "quality_delta")
+    return quality_delta is not None and quality_delta < QUALITY_REGRESSION_THRESHOLD
+
+
+def _present_quality_evaluators(
+    threshold: WorkloadThreshold,
+    rows: list[pd.Series],
+) -> set[str]:
+    observed = {_clean_string(value).lower() for value in _quality_signal_values(rows)}
+    observed = {value for value in observed if value}
+    present: set[str] = set()
+    for evaluator in threshold.required_quality_evaluators:
+        aliases = QUALITY_EVALUATOR_ALIASES.get(evaluator, (evaluator,))
+        if any(alias.lower() in observed for alias in aliases):
+            present.add(evaluator)
+    return present
+
+
+def _quality_signal_values(rows: list[pd.Series]) -> list[str]:
+    values: list[str] = []
+    for row in rows:
+        for column in (
+            "eval_type",
+            "quality_method",
+            "quality_evaluator",
+            "evaluator_id",
+            "evaluator_ids",
+            "required_evaluator",
+        ):
+            if column not in row.index:
+                continue
+            raw = row.get(column)
+            if isinstance(raw, list):
+                values.extend(str(item) for item in raw)
+            else:
+                values.extend(_split_signal_values(raw))
+        if "quality_score_mean" in row.index and _has_observed_value(row.get("quality_score_mean")):
+            values.append("quality_score_mean")
+        if "quality_delta" in row.index and _has_observed_value(row.get("quality_delta")):
+            values.append("quality_delta")
+    return values
+
+
+def _split_signal_values(value) -> list[str]:
+    cleaned = _clean_string(value)
+    if not cleaned:
+        return []
+    normalized = cleaned.replace(",", ";")
+    return [item.strip() for item in normalized.split(";") if item.strip()]
+
+
+def _ensure_next_experiment_plan(recommendation: StrategyRecommendation) -> None:
+    if recommendation.decision not in {"inconclusive", "needs_more_data"}:
+        return
+    if recommendation.next_experiment_plans:
+        return
+
+    threshold = recommendation.workload_threshold or WORKLOAD_THRESHOLDS["long_context_qa"]
+    reason = _next_experiment_reason(recommendation)
+    plan = _build_next_experiment_plan(recommendation, threshold, reason)
+    recommendation.next_experiment_plans.append(plan)
+    _append_unique(recommendation.next_experiments, f"Command template: {plan.command}")
+    _append_unique(recommendation.next_experiment_priority, plan.objective)
+
+
+def _next_experiment_reason(recommendation: StrategyRecommendation) -> str:
+    if recommendation.missing_required_metrics:
+        return "missing_required_metrics"
+    if recommendation.quality_gate_status in {"unknown", "warn"}:
+        return "insufficient_quality_coverage"
+    if recommendation.decision == "needs_more_data":
+        return "missing_comparison_artifact"
+    if not any(item.metric for item in recommendation.evidence):
+        return "missing_metric_evidence"
+    return "insufficient_comparison_evidence"
+
+
+def _build_next_experiment_plan(
+    recommendation: StrategyRecommendation,
+    threshold: WorkloadThreshold,
+    reason: str,
+) -> NextExperimentPlan:
+    command, required_bindings = _next_experiment_command_template(recommendation.strategy)
+    return NextExperimentPlan(
+        reason=reason,
+        objective=_next_experiment_objective(reason, threshold.workload_profile),
+        command=command.replace("<workload_profile>", threshold.workload_profile),
+        required_bindings=required_bindings,
+        options={
+            "workload_profile": threshold.workload_profile,
+            "min_samples": threshold.minimum_samples,
+            "repeated_trials": threshold.minimum_repeated_trials,
+            "randomize_order": True,
+            "required_metrics": threshold.required_metrics,
+            "recommended_metrics": threshold.recommended_metrics,
+            "required_quality_evaluators": threshold.required_quality_evaluators,
+            "missing_required_metrics": recommendation.missing_required_metrics,
+            "missing_recommended_metrics": recommendation.missing_recommended_metrics,
+        },
+    )
+
+
+def _next_experiment_objective(reason: str, workload_profile: str) -> str:
+    objectives = {
+        "missing_required_metrics": "collect_required_metrics_and_quality_evidence",
+        "insufficient_quality_coverage": "collect_required_quality_evaluator_coverage",
+        "missing_comparison_artifact": "produce_missing_comparison_artifact",
+        "missing_metric_evidence": "collect_comparable_metric_evidence",
+        "insufficient_comparison_evidence": "remove_blocking_uncertainty",
+    }
+    return f"{objectives.get(reason, 'remove_blocking_uncertainty')}:{workload_profile}"
+
+
+def _next_experiment_command_template(strategy: str) -> tuple[str, dict[str, str]]:
+    common = {
+        "plan_dir": "<plan_dir>",
+        "experiment_prefix": "<experiment_prefix>",
+        "provider": "<provider>",
+        "engine": "<engine>",
+        "model_id": "<model_id>",
+        "base_url": "<base_url>",
+        "output_dir": "<output_dir>",
+        "concurrency": "<concurrency>",
+        "max_output_tokens": "<max_output_tokens>",
+    }
+    workload = {**common, "workload_file": "<workload_file>"}
+    templates = {
+        "prefix_caching": (
+            "kvoptbench cache-plan --plan-dir <plan_dir> "
+            "--experiment-prefix <experiment_prefix> --provider <provider> "
+            "--engine <engine> --model-id <model_id> --base-url <base_url> "
+            "--shared-workload-file <shared_workload_file> "
+            "--random-workload-file <random_workload_file> --output-dir <output_dir> "
+            "--concurrency <concurrency> --max-output-tokens <max_output_tokens>",
+            {
+                **common,
+                "shared_workload_file": "<shared_workload_file>",
+                "random_workload_file": "<random_workload_file>",
+            },
+        ),
+        "kv_quantization": (
+            "kvoptbench kv-quant-plan --plan-dir <plan_dir> "
+            "--experiment-prefix <experiment_prefix> --provider <provider> "
+            "--engine <engine> --model-id <model_id> --base-url <base_url> "
+            "--workload-file <workload_file> --output-dir <output_dir> "
+            "--workload-profile <workload_profile> --concurrency <concurrency> "
+            "--max-output-tokens <max_output_tokens>",
+            workload,
+        ),
+        "kv_offload": (
+            "kvoptbench kv-offload-plan --plan-dir <plan_dir> "
+            "--experiment-prefix <experiment_prefix> --provider <provider> "
+            "--engine <engine> --model-id <model_id> --base-url <base_url> "
+            "--workload-file <workload_file> --output-dir <output_dir> "
+            "--workload-profile <workload_profile> --concurrency <concurrency> "
+            "--max-output-tokens <max_output_tokens>",
+            workload,
+        ),
+        "speculative_decoding": (
+            "kvoptbench spec-decoding-plan --plan-dir <plan_dir> "
+            "--experiment-prefix <experiment_prefix> --provider <provider> "
+            "--engine <engine> --model-id <model_id> --base-url <base_url> "
+            "--workload-file <workload_file> --output-dir <output_dir> "
+            "--workload-profile <workload_profile> --concurrency <concurrency> "
+            "--max-output-tokens <max_output_tokens>",
+            workload,
+        ),
+        "prefill_decode_disaggregation": (
+            "kvoptbench disagg-plan --plan-dir <plan_dir> "
+            "--experiment-prefix <experiment_prefix> --provider <provider> "
+            "--engine <engine> --model-id <model_id> --base-url <base_url> "
+            "--workload-file <workload_file> --output-dir <output_dir> "
+            "--workload-profile <workload_profile> --concurrency <concurrency> "
+            "--max-output-tokens <max_output_tokens>",
+            workload,
+        ),
+        "long_context_memory_pressure": (
+            "kvoptbench long-context-plan --plan-dir <plan_dir> "
+            "--experiment-prefix <experiment_prefix> --provider <provider> "
+            "--engine <engine> --model-id <model_id> --base-url <base_url> "
+            "--workload-file <workload_file> --output-dir <output_dir> "
+            "--concurrency <concurrency> --max-output-tokens <max_output_tokens>",
+            workload,
+        ),
+    }
+    return templates.get(
+        strategy,
+        ("kvoptbench run --config <experiment_config>", {"experiment_config": "<experiment_config>"}),
+    )
 
 
 def _apply_quality_guardrail(

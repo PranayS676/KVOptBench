@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from kvoptbench.workloads.common import filler_words, make_item
+from kvoptbench.workloads.common import filler_words, lifecycle_metadata, make_item
 
 
 def generate(count: int, target_input_tokens: int, target_output_tokens: int):
@@ -25,6 +25,16 @@ def generate(count: int, target_input_tokens: int, target_output_tokens: int):
                 target_input_tokens=target_input_tokens,
                 target_output_tokens=target_output_tokens,
                 eval_type="llm_judge_placeholder",
+                metadata=lifecycle_metadata(
+                    lifecycle_pattern="multi_turn",
+                    workload_profile="agentic_coding",
+                    request_group_id=f"agentic_session_{idx:04d}",
+                    session_boundary="single_session",
+                    reuse_hint="prior_turns",
+                    required_evaluators=["task_success", "test_outcome"],
+                    required_metrics=["latency_ms", "error_rate", "input_tokens", "output_tokens"],
+                    recommended_metrics=["cost_per_1k_tokens", "retry_rate"],
+                ),
             )
         )
     return items

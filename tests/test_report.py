@@ -22,8 +22,16 @@ def test_report_generator_creates_required_sections(tmp_path: Path) -> None:
                 "success_rate": 1.0,
                 "ttft_ms_p50": 100.0,
                 "ttft_ms_p95": 120.0,
+                "ttft_ms_count": 3,
+                "ttft_ms_ci95_low": 95.0,
+                "ttft_ms_ci95_high": 125.0,
+                "ttft_ms_stats_status": "ok",
                 "e2e_latency_ms_p50": 200.0,
                 "e2e_latency_ms_p95": 240.0,
+                "e2e_latency_ms_count": 3,
+                "e2e_latency_ms_ci95_low": 190.0,
+                "e2e_latency_ms_ci95_high": 250.0,
+                "e2e_latency_ms_stats_status": "ok",
                 "output_tokens_per_second_mean": 20.0,
                 "quality_score_mean": 1.0,
                 "cache_hit_rate_mean": 0.9,
@@ -49,6 +57,8 @@ def test_report_generator_creates_required_sections(tmp_path: Path) -> None:
     assert "## Workload Summary" in report
     assert "## Latency Summary" in report
     assert "## TTFT Summary" in report
+    assert "## Repetition Statistics" in report
+    assert "95.000 to 125.000" in report
     assert "## Throughput Summary" in report
     assert "## Quality Summary" in report
     assert "## Cache Summary" in report

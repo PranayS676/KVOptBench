@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from kvoptbench.workloads.common import filler_words, make_item
+from kvoptbench.workloads.common import filler_words, lifecycle_metadata, make_item
 
 
 def generate(count: int, target_input_tokens: int, target_output_tokens: int):
@@ -51,6 +51,19 @@ def generate(count: int, target_input_tokens: int, target_output_tokens: int):
                 target_output_tokens=target_output_tokens,
                 eval_type="tool_calling",
                 metadata={
+                    **lifecycle_metadata(
+                        lifecycle_pattern="multi_request",
+                        workload_profile="tool_calling",
+                        request_group_id="tool_calling_group_001",
+                        reuse_hint="related_requests",
+                        required_evaluators=[
+                            "tool_selection_validity",
+                            "argument_validity",
+                            "task_success",
+                        ],
+                        required_metrics=["latency_ms", "error_rate", "invalid_tool_call_rate"],
+                        recommended_metrics=["retry_rate"],
+                    ),
                     "openai_tools": openai_tools,
                     "tool_choice": "auto",
                     "expected_tool": answer,

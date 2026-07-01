@@ -5,10 +5,14 @@ from __future__ import annotations
 import json
 import math
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from kvoptbench.telemetry.metrics import MetricRecord
+import httpx
+from pydantic import BaseModel, Field
+
+from kvoptbench.telemetry.metrics import MetricRecord, MissingMetric
 
 
 _SAMPLE_RE = re.compile(
@@ -21,6 +25,134 @@ _SAMPLE_RE = re.compile(
 
 def collect_prometheus_metrics() -> dict:
     return {"reason": "Prometheus telemetry is not collected in local mock mode."}
+
+
+class PrometheusScrapeResult(BaseModel):
+    """Result of one bounded Prometheus text scrape."""
+
+    source_name: str
+    success: bool
+    scrape_started_at: str
+    scrape_finished_at: str
+    records: list[MetricRecord] = Field(default_factory=list)
+    missing_metrics: list[MissingMetric] = Field(default_factory=list)
+    status_code: int | None = None
+    error_type: str | None = None
+    error_message: str | None = None
+    raw_text: str | None = None
+
+
+def scrape_prometheus_endpoint(
+    url: str,
+    *,
+    source_name: str = "prometheus",
+    timeout_seconds: float = 2.0,
+    expected_metrics: list[str] | tuple[str, ...] | None = None,
+    metric_aliases: dict[str, str] | None = None,
+    client: Any | None = None,
+) -> PrometheusScrapeResult:
+    """Fetch and parse Prometheus text exposition from a configured endpoint.
+
+    The optional ``client`` only needs a ``get(url, timeout=...)`` method, which keeps
+    unit tests on fake HTTP clients and avoids any live network dependency.
+    """
+    started_at = _utc_now()
+    expected = list(expected_metrics or [])
+    try:
+        response = _prometheus_get(url, timeout_seconds=timeout_seconds, client=client)
+        response.raise_for_status()
+        text = response.text
+        records = normalize_prometheus_records(
+            parse_prometheus_samples(text),
+            metric_aliases=metric_aliases,
+        )
+        missing_metrics = _missing_expected_prometheus_metrics(
+            records,
+            expected_metrics=expected,
+            source_name=source_name,
+        )
+        return PrometheusScrapeResult(
+            source_name=source_name,
+            success=True,
+            scrape_started_at=started_at,
+            scrape_finished_at=_utc_now(),
+            records=records,
+            missing_metrics=missing_metrics,
+            status_code=getattr(response, "status_code", None),
+            raw_text=text,
+        )
+    except httpx.TimeoutException as exc:
+        return _failed_scrape_result(
+            source_name=source_name,
+            started_at=started_at,
+            expected_metrics=expected,
+            error_type="timeout",
+            error_message=f"Prometheus scrape timed out for source '{source_name}': {exc}",
+        )
+    except httpx.HTTPStatusError as exc:
+        return _failed_scrape_result(
+            source_name=source_name,
+            started_at=started_at,
+            expected_metrics=expected,
+            error_type="http_status",
+            error_message=f"Prometheus scrape failed for source '{source_name}': {exc}",
+            status_code=exc.response.status_code,
+        )
+    except httpx.HTTPError as exc:
+        return _failed_scrape_result(
+            source_name=source_name,
+            started_at=started_at,
+            expected_metrics=expected,
+            error_type="http_error",
+            error_message=f"Prometheus scrape failed for source '{source_name}': {exc}",
+        )
+    except (json.JSONDecodeError, ValueError, TypeError) as exc:
+        return _failed_scrape_result(
+            source_name=source_name,
+            started_at=started_at,
+            expected_metrics=expected,
+            error_type="parse_error",
+            error_message=f"Prometheus scrape could not be parsed for source '{source_name}': {exc}",
+        )
+
+
+def scrape_prometheus_endpoints(
+    endpoints: list[dict[str, Any]],
+    *,
+    client: Any | None = None,
+) -> list[PrometheusScrapeResult]:
+    """Scrape multiple configured Prometheus endpoints without runner wiring."""
+    results: list[PrometheusScrapeResult] = []
+    for endpoint in endpoints:
+        results.append(
+            scrape_prometheus_endpoint(
+                str(endpoint["url"]),
+                source_name=str(endpoint.get("name") or "prometheus"),
+                timeout_seconds=float(endpoint.get("timeout_seconds") or 2.0),
+                expected_metrics=endpoint.get("expected_metrics"),
+                metric_aliases=endpoint.get("metric_aliases"),
+                client=client,
+            )
+        )
+    return results
+
+
+def normalize_prometheus_records(
+    records: list[MetricRecord],
+    *,
+    metric_aliases: dict[str, str] | None = None,
+) -> list[MetricRecord]:
+    """Apply optional raw-to-normalized metric aliases after offline parsing."""
+    aliases = metric_aliases or {}
+    normalized: list[MetricRecord] = []
+    for record in records:
+        raw_name = record.raw_name or record.name
+        normalized_name = aliases.get(raw_name, aliases.get(record.name, record.name))
+        if normalized_name == record.name and raw_name == record.raw_name:
+            normalized.append(record)
+            continue
+        normalized.append(record.model_copy(update={"name": normalized_name, "raw_name": raw_name}))
+    return normalized
 
 
 def parse_prometheus_samples(source: str | Path) -> list[MetricRecord]:
@@ -40,6 +172,68 @@ def parse_prometheus_samples(source: str | Path) -> list[MetricRecord]:
 def parse_prometheus_file(path: str | Path) -> list[MetricRecord]:
     """Parse Prometheus samples from a local file."""
     return parse_prometheus_samples(Path(path))
+
+
+def _prometheus_get(url: str, *, timeout_seconds: float, client: Any | None) -> Any:
+    if client is not None:
+        return client.get(url, timeout=timeout_seconds)
+    return httpx.get(url, timeout=timeout_seconds)
+
+
+def _failed_scrape_result(
+    *,
+    source_name: str,
+    started_at: str,
+    expected_metrics: list[str],
+    error_type: str,
+    error_message: str,
+    status_code: int | None = None,
+) -> PrometheusScrapeResult:
+    missing = [
+        MissingMetric(metric=metric, reason=error_message, source=source_name)
+        for metric in expected_metrics
+    ]
+    if not missing:
+        missing.append(
+            MissingMetric(
+                metric="prometheus_scrape",
+                reason=error_message,
+                source=source_name,
+            )
+        )
+    return PrometheusScrapeResult(
+        source_name=source_name,
+        success=False,
+        scrape_started_at=started_at,
+        scrape_finished_at=_utc_now(),
+        records=[],
+        missing_metrics=missing,
+        status_code=status_code,
+        error_type=error_type,
+        error_message=error_message,
+    )
+
+
+def _missing_expected_prometheus_metrics(
+    records: list[MetricRecord],
+    *,
+    expected_metrics: list[str],
+    source_name: str,
+) -> list[MissingMetric]:
+    present = {record.name for record in records}
+    return [
+        MissingMetric(
+            metric=metric,
+            reason=f"{metric} was not present in the Prometheus scrape.",
+            source=source_name,
+        )
+        for metric in expected_metrics
+        if metric not in present
+    ]
+
+
+def _utc_now() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _read_source(source: str | Path) -> tuple[str, str | None]:

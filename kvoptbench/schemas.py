@@ -43,6 +43,14 @@ class ExperimentConfig(BaseModel):
     capture_reasoning_content: bool = False
     capture_tool_calls: bool = True
     stream: bool = True
+    engine_version: str | None = None
+    model_revision: str | None = None
+    cuda_version: str | None = None
+    gpu_type: str | None = None
+    gpu_count: int | None = Field(default=None, ge=0)
+    backend_launch_command: str | None = None
+    config_sha256: str | None = None
+    workload_sha256: str | None = None
     endpoint_metadata: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -132,6 +140,14 @@ class RunEnvironmentSnapshot(BaseModel):
     git_commit: str | None = None
     git_branch: str | None = None
     git_dirty: bool | None = None
+    engine_version: str | None = None
+    model_revision: str | None = None
+    cuda_version: str | None = None
+    gpu_type: str | None = None
+    gpu_count: int | None = None
+    backend_launch_command: str | None = None
+    config_sha256: str | None = None
+    workload_sha256: str | None = None
     package_versions: dict[str, str] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
 

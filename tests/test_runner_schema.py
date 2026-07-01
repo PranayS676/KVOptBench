@@ -168,6 +168,89 @@ def test_runner_writes_reasoning_compatibility_fields(monkeypatch, tmp_path: Pat
     assert result.metadata["response_metadata"]["finish_reason"] == "stop"
 
 
+def test_runner_records_configured_environment_metadata(monkeypatch, tmp_path: Path) -> None:
+    workload_file = tmp_path / "workload.jsonl"
+    output_file = tmp_path / "results.jsonl"
+    config_file = tmp_path / "config.yaml"
+    item = WorkloadItem(
+        task_id="env-1",
+        workload="decode_heavy",
+        category="decode",
+        prompt="Return endpoint-ok",
+        expected_answer="endpoint-ok",
+        target_input_tokens=32,
+        target_output_tokens=16,
+    )
+    workload_file.write_text(json.dumps(item.model_dump()) + "\n", encoding="utf-8")
+    config_file.write_text(
+        "\n".join(
+            [
+                "experiment_id: env_runner_test",
+                "official_run: false",
+                "provider: local",
+                "engine: vllm",
+                "endpoint_type: vllm",
+                "model_id: example/model",
+                "strategy: baseline",
+                "base_url: http://testserver/v1",
+                f"workload_file: {workload_file.as_posix()}",
+                f"output_file: {output_file.as_posix()}",
+                "concurrency: 1",
+                "max_tasks: 1",
+                "engine_version: 0.8.0",
+                "model_revision: rev-1",
+                "cuda_version: '12.4'",
+                "gpu_type: NVIDIA L40S",
+                "gpu_count: 1",
+                "backend_launch_command: vllm serve example/model --api-key secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeClient:
+        def __init__(self, config):
+            self.config = config
+
+        async def healthcheck(self) -> EndpointHealth:
+            return EndpointHealth(ok=True, url="http://testserver/v1/models")
+
+        async def chat(self, item: WorkloadItem) -> TimedResponse:
+            return TimedResponse(
+                content="endpoint-ok",
+                input_tokens=8,
+                output_tokens=2,
+                provider_completion_tokens=2,
+                ttft_ms=10.0,
+                tpot_ms=5.0,
+                itl_ms=5.0,
+                e2e_latency_ms=20.0,
+                success=True,
+                response_metadata={"cache_hit_rate": 0.5, "cache_miss_penalty_ms": 12.0},
+            )
+
+    monkeypatch.setattr("kvoptbench.runner.experiment.OpenAICompatClient", FakeClient)
+
+    asyncio.run(run_experiment(config_file))
+
+    row = json.loads(output_file.read_text(encoding="utf-8").strip())
+    result = RequestResult.model_validate(row)
+    assert result.engine_version == "0.8.0"
+    assert result.gpu_type == "NVIDIA L40S"
+    assert result.gpu_count == 1
+    assert result.environment is not None
+    assert result.environment.model_revision == "rev-1"
+    assert result.environment.cuda_version == "12.4"
+    assert result.environment.backend_launch_command.endswith("--api-key <redacted>")
+    assert result.environment.config_sha256 is not None
+    assert result.environment.workload_sha256 is not None
+    assert "engine_version" not in result.missing_metrics
+    assert "gpu_type" not in result.missing_metrics
+    assert "gpu_count" not in result.missing_metrics
+    assert result.metric_provenance["engine_version"].available is True
+    assert result.metric_provenance["gpu_type"].available is True
+
+
 def test_request_result_accepts_metric_provenance_and_environment_snapshot() -> None:
     result = RequestResult(
         run_id="run",

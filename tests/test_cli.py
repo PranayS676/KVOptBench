@@ -1,3 +1,4 @@
+import csv
 import json
 
 from typer.testing import CliRunner
@@ -67,6 +68,173 @@ def test_cache_plan_cli_writes_yaml_configs(tmp_path) -> None:
     assert result.exit_code == 0
     assert "Wrote 8 cache experiment configs" in result.stdout
     assert len(list((tmp_path / "plan").glob("*.yaml"))) == 8
+
+
+def test_strategy_plan_and_run_cli_write_manifests(tmp_path) -> None:
+    runner = CliRunner()
+    workload_pack = tmp_path / "workload_pack.yaml"
+    workload_pack.write_text(
+        "\n".join(
+            [
+                "workloads:",
+                "  primary: workloads/generated/decode.jsonl",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    plan_dir = tmp_path / "strategy_plan"
+    run_manifest = tmp_path / "run_manifest.json"
+
+    plan_result = runner.invoke(
+        app,
+        [
+            "strategy-plan",
+            "--plan-dir",
+            str(plan_dir),
+            "--matrix-id",
+            "decode_matrix",
+            "--provider",
+            "local",
+            "--engine",
+            "vllm",
+            "--model-id",
+            "example/model",
+            "--base-url",
+            "http://127.0.0.1:8000/v1",
+            "--workload-pack",
+            str(workload_pack),
+            "--strategy-family",
+            "decode-heavy",
+            "--strategy",
+            "baseline",
+            "--concurrency",
+            "1",
+            "--output-dir",
+            str(tmp_path / "raw"),
+            "--repeat-count",
+            "2",
+            "--randomization-seed",
+            "11",
+        ],
+    )
+
+    assert plan_result.exit_code == 0
+    assert "Wrote 1 strategy configs" in plan_result.stdout
+    assert (plan_dir / "plan_manifest.json").exists()
+
+    run_result = runner.invoke(
+        app,
+        [
+            "strategy-run",
+            "--matrix-manifest",
+            str(plan_dir / "plan_manifest.json"),
+            "--output-run-manifest",
+            str(run_manifest),
+            "--randomize",
+            "--dry-run",
+        ],
+    )
+
+    assert run_result.exit_code == 0
+    assert "Wrote run manifest" in run_result.stdout
+    assert "Dry run only" in run_result.stdout
+    assert run_manifest.exists()
+
+
+def test_import_cli_writes_request_jsonl_for_genai_perf(tmp_path) -> None:
+    runner = CliRunner()
+    source = tmp_path / "genai_perf.json"
+    output = tmp_path / "imported.jsonl"
+    manifest = tmp_path / "import_manifest.json"
+    source.write_text(
+        json.dumps(
+            {
+                "requests": [
+                    {
+                        "request_id": "request-1",
+                        "model_name": "example/model",
+                        "input_tokens": 256,
+                        "output_tokens": 64,
+                        "time_to_first_token_ms": 140,
+                        "inter_token_latency_ms": 9.5,
+                        "request_latency_ms": 740,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "import",
+            "--tool",
+            "genai-perf",
+            "--source",
+            str(source),
+            "--output",
+            str(output),
+            "--experiment-id",
+            "genai-request",
+            "--workload",
+            "chat",
+            "--manifest-output",
+            str(manifest),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Wrote imported request JSONL" in result.stdout
+    row = json.loads(output.read_text(encoding="utf-8").strip())
+    assert row["task_id"] == "request-1"
+    assert row["metric_provenance"]["ttft_ms"]["source_type"] == "imported"
+    assert json.loads(manifest.read_text(encoding="utf-8"))["source"]["file_name"] == source.name
+
+
+def test_import_cli_writes_aggregate_csv_for_aiperf(tmp_path) -> None:
+    runner = CliRunner()
+    source = tmp_path / "aiperf.json"
+    output = tmp_path / "summary.csv"
+    source.write_text(
+        json.dumps(
+            {
+                "request_count": 20,
+                "success_rate_percent": 95,
+                "time_to_first_token_mean_ms": 110,
+                "inter_token_latency_mean_ms": 8,
+                "request_latency_mean_ms": 510,
+                "request_throughput": 4.2,
+                "output_token_throughput": 190.5,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "import",
+            "--tool",
+            "aiperf",
+            "--source",
+            str(source),
+            "--output",
+            str(output),
+            "--experiment-id",
+            "aiperf-aggregate",
+            "--workload",
+            "chat",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Wrote imported summary CSV" in result.stdout
+    with output.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows[0]["requests"] == "20"
+    assert rows[0]["ttft_ms_mean"] == "110.0"
+    assert "imported" in rows[0]["metric_provenance"]
 
 
 def test_cache_compare_cli_writes_cache_summary(tmp_path) -> None:

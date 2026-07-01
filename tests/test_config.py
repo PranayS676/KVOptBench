@@ -93,6 +93,35 @@ def test_load_config_supports_real_endpoint_fields(tmp_path: Path) -> None:
     assert config.endpoint_metadata["deployment"] == "local-vllm"
 
 
+def test_load_config_supports_environment_capture_fields(tmp_path: Path) -> None:
+    config_path = _write_config(
+        tmp_path / "environment.yaml",
+        "\n".join(
+            [
+                "engine_version: 0.8.0",
+                "model_revision: abc123",
+                "cuda_version: '12.4'",
+                "gpu_type: NVIDIA L40S",
+                "gpu_count: 1",
+                "backend_launch_command: vllm serve example/model --api-key secret",
+                "config_sha256: config-hash",
+                "workload_sha256: workload-hash",
+            ]
+        ),
+    )
+
+    config = load_config(config_path)
+
+    assert config.engine_version == "0.8.0"
+    assert config.model_revision == "abc123"
+    assert config.cuda_version == "12.4"
+    assert config.gpu_type == "NVIDIA L40S"
+    assert config.gpu_count == 1
+    assert config.backend_launch_command == "vllm serve example/model --api-key secret"
+    assert config.config_sha256 == "config-hash"
+    assert config.workload_sha256 == "workload-hash"
+
+
 def test_load_config_rejects_unknown_endpoint_type(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path / "bad_endpoint.yaml", "endpoint_type: custom_engine")
 

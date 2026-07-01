@@ -44,6 +44,10 @@ def test_summary_aggregation_creates_csv(tmp_path: Path) -> None:
     assert summary.loc[0, "requests"] == 3
     assert summary.loc[0, "success_rate"] == 1.0
     assert summary.loc[0, "ttft_ms_p95"] >= 100
+    assert summary.loc[0, "ttft_ms_count"] == 3
+    assert summary.loc[0, "ttft_ms_ci95_low"] < summary.loc[0, "ttft_ms_mean"]
+    assert summary.loc[0, "ttft_ms_ci95_high"] > summary.loc[0, "ttft_ms_mean"]
+    assert summary.loc[0, "ttft_ms_stats_status"] == "ok"
 
 
 def test_summary_aggregation_includes_reasoning_and_tool_call_columns(tmp_path: Path) -> None:

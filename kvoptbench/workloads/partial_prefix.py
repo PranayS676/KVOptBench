@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from kvoptbench.workloads.common import filler_words, make_item
+from kvoptbench.workloads.common import filler_words, lifecycle_metadata, make_item
 
 DEFAULT_RATIOS = (0.0, 0.25, 0.5, 0.75, 0.9, 1.0)
 
@@ -36,7 +36,18 @@ def generate(count: int, target_input_tokens: int, target_output_tokens: int):
                 prefix_group_id="partial_prefix_doc_001" if shared_prefix_tokens > 0 else None,
                 shared_prefix_tokens=shared_prefix_tokens,
                 eval_type="contains_expected",
-                metadata={"shared_prefix_ratio": ratio},
+                metadata={
+                    **lifecycle_metadata(
+                        lifecycle_pattern="retrieval",
+                        workload_profile="long_context_qa",
+                        request_group_id="partial_prefix_doc_001",
+                        reuse_hint="shared_prefix" if shared_prefix_tokens > 0 else "none",
+                        required_evaluators=["answer_correctness", "factuality"],
+                        required_metrics=["input_tokens", "output_tokens", "latency_ms"],
+                        recommended_metrics=["cache_hit_rate", "cache_load_ms"],
+                    ),
+                    "shared_prefix_ratio": ratio,
+                },
             )
         )
     return items
