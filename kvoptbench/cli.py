@@ -1061,6 +1061,7 @@ def strategy_select_command(
 @app.command("strategy-recommend")
 def strategy_recommend_command(
     summary: Path = typer.Option(..., "--summary", help="Required summary CSV."),
+    advisor_config: Path | None = typer.Option(None, "--advisor-config"),
     cache_input: Path | None = typer.Option(None, "--cache-input"),
     prefix_sweep_input: Path | None = typer.Option(None, "--prefix-sweep-input"),
     prefill_decode_input: Path | None = typer.Option(None, "--prefill-decode-input"),
@@ -1080,6 +1081,7 @@ def strategy_recommend_command(
 
     report = build_strategy_advisor_report(
         summary_path=summary,
+        advisor_config_path=advisor_config,
         cache_input_path=cache_input,
         prefix_sweep_input_path=prefix_sweep_input,
         prefill_decode_input_path=prefill_decode_input,

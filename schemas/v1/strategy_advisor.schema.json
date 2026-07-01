@@ -208,6 +208,13 @@
           "default": null,
           "title": "Rank"
         },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
         "score": {
           "default": 0.0,
           "title": "Score",

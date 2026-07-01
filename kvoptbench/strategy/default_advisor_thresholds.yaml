@@ -1,0 +1,92 @@
+workload_thresholds:
+  rag:
+    workload_profile: rag
+    primary_focus: answer quality, retrieval-sensitive latency, and cost
+    minimum_samples: 30
+    minimum_repeated_trials: 2
+    required_quality_evaluators:
+      - answer_relevance
+      - factuality
+    required_metrics:
+      - latency_ms
+      - error_rate
+      - input_tokens
+      - output_tokens
+    recommended_metrics:
+      - cost_per_1k_tokens
+      - cache_hit_rate
+    threshold_posture: favor quality preservation; latency or cost wins must not override answer regressions
+    blocking_quality_regression: true
+  long_context_qa:
+    workload_profile: long_context_qa
+    primary_focus: long-input reliability, TTFT, and end-to-end latency
+    minimum_samples: 20
+    minimum_repeated_trials: 2
+    required_quality_evaluators:
+      - answer_correctness
+      - factuality
+    required_metrics:
+      - input_tokens
+      - output_tokens
+      - ttft_ms
+      - e2e_latency_ms
+      - timeout_rate
+    recommended_metrics:
+      - cache_hit_rate
+      - gpu_memory_peak_gb
+    threshold_posture: require stronger sample coverage because prompt length variance is high
+    blocking_quality_regression: true
+  tool_calling:
+    workload_profile: tool_calling
+    primary_focus: valid tool selection, argument correctness, and latency
+    minimum_samples: 30
+    minimum_repeated_trials: 2
+    required_quality_evaluators:
+      - tool_selection_validity
+      - argument_validity
+      - task_success
+    required_metrics:
+      - latency_ms
+      - error_rate
+      - invalid_tool_call_rate
+    recommended_metrics:
+      - retry_rate
+      - input_tokens
+      - output_tokens
+    threshold_posture: block confident wins if tool correctness drops materially
+    blocking_quality_regression: true
+  agentic_coding:
+    workload_profile: agentic_coding
+    primary_focus: task success, patch quality, latency, and cost
+    minimum_samples: 10
+    minimum_repeated_trials: 2
+    required_quality_evaluators:
+      - task_success
+      - test_outcome
+    required_metrics:
+      - latency_ms
+      - error_rate
+      - input_tokens
+      - output_tokens
+      - cost_per_1k_tokens
+    recommended_metrics:
+      - retry_rate
+    threshold_posture: treat quality evidence as mandatory; performance-only wins are advisory
+    blocking_quality_regression: true
+  decode_heavy:
+    workload_profile: decode_heavy
+    primary_focus: output throughput, latency stability, and error rate
+    minimum_samples: 20
+    minimum_repeated_trials: 2
+    required_quality_evaluators:
+      - output_validity
+    required_metrics:
+      - output_tokens_per_second
+      - latency_ms
+      - error_rate
+      - output_tokens
+    recommended_metrics:
+      - speculative_acceptance_rate
+      - input_tokens
+    threshold_posture: throughput can lead only when error-rate and quality gates pass
+    blocking_quality_regression: true
