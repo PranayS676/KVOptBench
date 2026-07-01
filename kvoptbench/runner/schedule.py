@@ -24,6 +24,7 @@ class ScheduledRun:
     schedule_id: str
     seed: int
     randomize: bool
+    block_randomization: bool
     repeat_count: int
 
     @property
@@ -38,6 +39,7 @@ class ScheduledRun:
             "order_index": self.order_index,
             "seed": self.seed,
             "randomize": self.randomize,
+            "block_randomization": self.block_randomization,
             "repeat_count": self.repeat_count,
         }
 
@@ -47,6 +49,7 @@ def build_schedule(
     repeat_count: int = 1,
     seed: int = 0,
     randomize: bool = False,
+    block_randomization: bool = False,
 ) -> list[ScheduledRun]:
     """Build a deterministic schedule from experiment config paths."""
     paths = [Path(path) for path in config_paths]
@@ -60,14 +63,18 @@ def build_schedule(
         repeat_count=repeat_count,
         seed=seed,
         randomize=randomize,
+        block_randomization=block_randomization,
     )
-    expanded = [
-        (config_path, trial_index, repeat_index)
-        for repeat_index in range(repeat_count)
-        for trial_index, config_path in enumerate(paths)
-    ]
+    expanded = []
+    rng = random.Random(seed)
+    for repeat_index in range(repeat_count):
+        block = [(config_path, trial_index, repeat_index) for trial_index, config_path in enumerate(paths)]
+        if randomize and block_randomization:
+            rng.shuffle(block)
+        expanded.extend(block)
     if randomize:
-        random.Random(seed).shuffle(expanded)
+        if not block_randomization:
+            rng.shuffle(expanded)
 
     return [
         ScheduledRun(
@@ -78,6 +85,7 @@ def build_schedule(
             schedule_id=schedule_id,
             seed=seed,
             randomize=randomize,
+            block_randomization=block_randomization,
             repeat_count=repeat_count,
         )
         for order_index, (config_path, trial_index, repeat_index) in enumerate(expanded)
@@ -106,12 +114,14 @@ def _build_schedule_id(
     repeat_count: int,
     seed: int,
     randomize: bool,
+    block_randomization: bool,
 ) -> str:
     payload = {
         "config_paths": [path.as_posix() for path in config_paths],
         "repeat_count": repeat_count,
         "seed": seed,
         "randomize": randomize,
+        "block_randomization": block_randomization,
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     digest = hashlib.sha256(encoded).hexdigest()[:16]

@@ -917,6 +917,7 @@ def strategy_run_command(
     repeat_count: int | None = typer.Option(None, "--repeat-count", min=1),
     randomization_seed: int | None = typer.Option(None, "--randomization-seed"),
     randomize: bool = typer.Option(False, "--randomize"),
+    block_randomization: bool = typer.Option(False, "--block-randomization"),
     dry_run: bool = typer.Option(False, "--dry-run"),
 ) -> None:
     """Run or dry-run a strategy matrix through a deterministic schedule."""
@@ -929,6 +930,7 @@ def strategy_run_command(
             repeat_count=repeat_count,
             randomization_seed=randomization_seed,
             randomize=randomize,
+            block_randomization=block_randomization,
             dry_run=dry_run,
         )
     except (FileNotFoundError, ValueError) as exc:

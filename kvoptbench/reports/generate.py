@@ -108,6 +108,7 @@ def generate_report(
         )
 
     _append_repetition_statistics(lines, frame)
+    _append_methodology_caveats(lines, frame)
 
     lines.extend(
         [
@@ -361,6 +362,37 @@ def _append_repetition_statistics(lines: list[str], frame: pd.DataFrame) -> None
             f"{_fmt(row.get('e2e_latency_ms_count'))} | "
             f"{_ci(row.get('e2e_latency_ms_ci95_low'), row.get('e2e_latency_ms_ci95_high'))} | "
             f"{status} |"
+        )
+
+
+def _append_methodology_caveats(lines: list[str], frame: pd.DataFrame) -> None:
+    if "methodology_status" not in frame.columns and "methodology_caveats" not in frame.columns:
+        return
+    rows = []
+    for _, row in frame.iterrows():
+        status = str(row.get("methodology_status", "")).strip()
+        caveats = str(row.get("methodology_caveats", "")).strip()
+        if status == "exploratory" or caveats:
+            rows.append((row, status or "exploratory", caveats))
+    if not rows:
+        return
+
+    lines.extend(
+        [
+            "",
+            "## Methodology Caveats",
+            "",
+            "Treat exploratory rows as directional only until repeated, randomized, "
+            "quality-covered runs are available.",
+            "",
+            "| workload | strategy | status | caveats |",
+            "|---|---|---|---|",
+        ]
+    )
+    for row, status, caveats in rows:
+        lines.append(
+            f"| {row.get('workload', 'unknown')} | {row.get('strategy', 'unknown')} | "
+            f"{status} | {caveats or 'n/a'} |"
         )
 
 

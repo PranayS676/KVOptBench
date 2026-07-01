@@ -163,6 +163,15 @@ kvoptbench validate-results --input results/raw
 kvoptbench validate-package --path results/packages/golden
 ```
 
+## Benchmark Methodology
+
+KVOptBench labels weak evidence instead of overstating it. Repeated-run summaries
+and comparison CSVs include sample counts, p50/p95, 95% confidence intervals,
+effect sizes where applicable, `methodology_status`, and caveats. Warmup rows can
+be excluded before aggregation, optional IQR outlier filtering is available through
+the statistics helpers, and `strategy-run --block-randomization` randomizes each
+repeat block without mixing repeats together.
+
 ## Bring Your Own Endpoint
 
 KVOptBench expects a running OpenAI-compatible HTTP endpoint. The endpoint can be local or remote.

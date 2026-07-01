@@ -4,7 +4,10 @@ from pathlib import Path
 import pandas as pd
 
 from kvoptbench.analysis.statistics import (
+    MethodologyPolicy,
+    apply_methodology_policy,
     aggregate_repeated_results,
+    bootstrap_mean_ci,
     compare_repeated_results,
     flatten_metric_stats,
     load_results,
@@ -74,6 +77,41 @@ def test_confidence_interval_uses_normal_approximation_for_repeated_trials() -> 
     assert summary["ci95_high"] == 121.316
 
 
+def test_bootstrap_mean_ci_is_reproducible_and_brackets_the_mean() -> None:
+    first = bootstrap_mean_ci([10.0, 20.0, 30.0, 40.0], iterations=500, seed=7)
+    second = bootstrap_mean_ci([10.0, 20.0, 30.0, 40.0], iterations=500, seed=7)
+
+    assert first == second
+    assert first[0] < 25.0 < first[1]
+
+
+def test_methodology_policy_excludes_warmup_and_iqr_outliers() -> None:
+    frame = pd.DataFrame(
+        [
+            {"task_id": "warmup", "ttft_ms": 50.0, "warmup": True},
+            {"task_id": "a", "ttft_ms": 100.0, "warmup": False},
+            {"task_id": "b", "ttft_ms": 101.0, "warmup": False},
+            {"task_id": "c", "ttft_ms": 102.0, "warmup": False},
+            {"task_id": "outlier", "ttft_ms": 10000.0, "warmup": False},
+        ]
+    )
+
+    result = apply_methodology_policy(
+        frame,
+        MethodologyPolicy(
+            warmup_column="warmup",
+            outlier_policy="iqr",
+            outlier_metric_columns=("ttft_ms",),
+        ),
+    )
+
+    assert result.frame["task_id"].tolist() == ["a", "b", "c"]
+    assert result.removed_warmup_rows == 1
+    assert result.removed_outlier_rows == 1
+    assert "warmup rows excluded: 1" in result.caveats
+    assert "outlier rows excluded by iqr policy: 1" in result.caveats
+
+
 def test_flatten_metric_stats_adds_status_columns() -> None:
     stats = flatten_metric_stats("baseline_ttft_ms", [100.0, 110.0, 120.0])
 
@@ -134,6 +172,30 @@ def test_compare_repeated_results_adds_candidate_vs_baseline_delta() -> None:
     assert row["tpot_ms_baseline_count"] == 2
     assert row["tpot_ms_candidate_count"] == 1
     assert row["tpot_ms_candidate_ci95_low"] is None
+    assert row["ttft_ms_comparison_status"] == "ok"
+    assert row["ttft_ms_comparison_caveats"] == ""
+
+
+def test_compare_repeated_results_labels_weak_runs_as_exploratory() -> None:
+    frame = pd.DataFrame(
+        [
+            _result_row("shared_prefix", "baseline", 100.0, 10.0),
+            _result_row("shared_prefix", "candidate", 80.0, 8.0),
+        ]
+    )
+
+    comparison = compare_repeated_results(
+        frame,
+        group_columns=["workload"],
+        metric_columns=["ttft_ms"],
+        baseline_strategy="baseline",
+        candidate_strategy="candidate",
+        min_samples=2,
+    )
+
+    row = comparison.iloc[0]
+    assert row["ttft_ms_comparison_status"] == "exploratory"
+    assert "insufficient samples" in row["ttft_ms_comparison_caveats"]
 
 
 def test_load_results_reads_csv_jsonl_file_and_jsonl_directory(tmp_path: Path) -> None:
