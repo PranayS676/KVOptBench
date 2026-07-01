@@ -308,6 +308,21 @@ The CLI can generate config plans and comparison CSVs for common inference-strat
 - `strategy-recommend`
 - `result-package`
 
+External benchmark imports preserve source metadata and metric provenance. Inspect
+the mapping registry before importing third-party outputs:
+
+```bash
+kvoptbench import-mappings --tool genai-perf --granularity request
+kvoptbench import \
+  --tool genai-perf \
+  --source path/to/genai_perf.json \
+  --output results/raw/imported_genai_perf.jsonl \
+  --experiment-id imported-genai-perf \
+  --workload sharegpt \
+  --manifest-output results/imports/genai_perf_manifest.json \
+  --fail-on-missing-required
+```
+
 Command previews document how a compatible server may be started. They do not launch servers:
 
 ```bash

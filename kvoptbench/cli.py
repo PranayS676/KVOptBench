@@ -836,6 +836,40 @@ def run_command(
     print(f"[green]Wrote results[/green] {output}")
 
 
+@app.command("import-mappings")
+def import_mappings_command(
+    tool: Literal["vllm-bench", "genai-perf", "aiperf"] | None = typer.Option(
+        None,
+        "--tool",
+        help="Optional external benchmark tool to filter mappings.",
+    ),
+    granularity: Literal["any", "request", "aggregate"] = typer.Option(
+        "any",
+        "--granularity",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+) -> None:
+    """Inspect the external benchmark metric mapping registry."""
+    from kvoptbench.importers.metrics import mapping_registry_payload
+
+    payload = mapping_registry_payload(
+        external_tool=_external_import_tool_key(tool) if tool is not None else None,
+        granularity=granularity,
+    )
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2))
+        return
+    print(
+        f"[bold]Mapping registry v{payload['mapping_registry_version']}[/bold] "
+        f"tool={payload['tool'] or 'all'} granularity={payload['granularity']}"
+    )
+    for mapping in payload["mappings"]:
+        print(
+            f"{mapping['external_tool']} -> {mapping['normalized_field']} "
+            f"({', '.join(mapping['aliases'])})"
+        )
+
+
 @app.command("import")
 def import_command(
     tool: Literal["vllm-bench", "genai-perf", "aiperf"] = typer.Option(..., "--tool"),
@@ -857,7 +891,10 @@ def import_command(
 ) -> None:
     """Import external benchmark artifacts without claiming KVOptBench ran them."""
     try:
+        external_tool = _external_import_tool_key(tool)
         if tool == "vllm-bench":
+            from kvoptbench.importers.external import source_manifest
+            from kvoptbench.importers.reader import read_source_records
             from kvoptbench.importers.vllm_bench import import_vllm_bench
 
             rows = import_vllm_bench(
@@ -872,14 +909,23 @@ def import_command(
                 concurrency=concurrency,
             )
             missing_metrics = _collect_import_missing_metrics(rows)
-            _write_jsonl(output, rows)
-            manifest = _basic_import_manifest(
-                tool=tool,
-                source=source,
+            missing_required = _missing_required_import_metrics(
+                external_tool,
+                granularity="request",
+                missing_metrics=missing_metrics,
+            )
+            if fail_on_missing_required and missing_required:
+                raise ValueError(
+                    "Missing required imported metrics: " + ", ".join(missing_required)
+                )
+            manifest = source_manifest(
+                read_source_records(source),
+                external_tool,
                 granularity="request",
                 row_count=len(rows),
                 missing_metrics=missing_metrics,
             )
+            _write_jsonl(output, rows)
             written_kind = "request JSONL"
         else:
             from kvoptbench.importers.aiperf import import_aiperf
@@ -900,6 +946,15 @@ def import_command(
             )
             missing_metrics = result.missing_metrics
             manifest = result.source_manifest
+            missing_required = _missing_required_import_metrics(
+                external_tool,
+                granularity=result.granularity,
+                missing_metrics=missing_metrics,
+            )
+            if fail_on_missing_required and missing_required:
+                raise ValueError(
+                    "Missing required imported metrics: " + ", ".join(missing_required)
+                )
             if result.granularity == "request":
                 _write_jsonl(output, result.request_rows)
                 written_kind = "request JSONL"
@@ -910,8 +965,6 @@ def import_command(
         if manifest_output is not None:
             manifest_output.parent.mkdir(parents=True, exist_ok=True)
             manifest_output.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-        if fail_on_missing_required and missing_metrics:
-            raise ValueError("Missing imported metrics: " + ", ".join(missing_metrics))
     except (FileNotFoundError, ValueError) as exc:
         print(f"[red]FAILED[/red] {exc}")
         raise typer.Exit(code=1) from exc
@@ -1224,22 +1277,24 @@ def _collect_import_missing_metrics(rows: list[dict[str, Any]]) -> list[str]:
     return sorted(missing)
 
 
-def _basic_import_manifest(
-    *,
-    tool: str,
-    source: Path,
-    granularity: str,
-    row_count: int,
-    missing_metrics: list[str],
-) -> dict[str, Any]:
+def _external_import_tool_key(tool: str | None) -> str:
     return {
-        "schema_version": "1",
-        "tool": tool,
-        "source": {"file_name": source.name},
-        "granularity": granularity,
-        "row_count": row_count,
-        "missing_metrics": missing_metrics,
-    }
+        "vllm-bench": "vllm_bench",
+        "genai-perf": "genai_perf",
+        "aiperf": "aiperf",
+    }[str(tool)]
+
+
+def _missing_required_import_metrics(
+    external_tool: str,
+    *,
+    granularity: Literal["request", "aggregate"],
+    missing_metrics: list[str],
+) -> list[str]:
+    from kvoptbench.importers.metrics import required_metric_fields
+
+    required = set(required_metric_fields(external_tool, granularity))
+    return [metric for metric in missing_metrics if metric in required]
 
 
 if __name__ == "__main__":

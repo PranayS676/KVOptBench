@@ -4,7 +4,7 @@ from pathlib import Path
 
 from kvoptbench.importers.aiperf import import_aiperf
 from kvoptbench.importers.genai_perf import import_genai_perf
-from kvoptbench.importers.metrics import metric_aliases
+from kvoptbench.importers.metrics import metric_aliases, required_metric_fields
 from kvoptbench.importers.vllm_bench import import_vllm_bench
 
 
@@ -44,6 +44,10 @@ def test_metric_registry_exposes_vllm_and_nvidia_aliases() -> None:
     assert "num_input_tokens" in metric_aliases("vllm_bench", "input_tokens", "request")
     assert "time_to_first_token_ms" in metric_aliases("genai_perf", "ttft_ms", "request")
     assert "time_to_first_output_token" in metric_aliases("aiperf", "ttft_ms", "request")
+    assert required_metric_fields("vllm_bench", "request") == [
+        "input_tokens",
+        "output_tokens",
+    ]
 
 
 def test_genai_perf_csv_metric_table_imports_aggregate_summary(tmp_path: Path) -> None:

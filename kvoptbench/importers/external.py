@@ -16,8 +16,10 @@ from kvoptbench.importers.metrics import (
     first_string,
     map_aggregate_metrics,
     map_imported_metrics,
+    mappings_for,
     normalize_key,
     raw_field_names,
+    required_metric_fields,
 )
 from kvoptbench.importers.reader import SourceRecordSet, read_source_records
 
@@ -62,8 +64,6 @@ def import_external_benchmark(
         external_tool=external_tool,
         requested_granularity=granularity,
     )
-    manifest = source_manifest(source_records, external_tool)
-
     if detected_granularity == "request":
         rows = [
             _request_row(
@@ -82,14 +82,21 @@ def import_external_benchmark(
             )
             for index, raw_row in enumerate(source_records.records)
         ]
+        missing_metrics = _collect_missing(rows)
         return ImportAdapterResult(
             tool=external_tool,
             adapter_version=ADAPTER_VERSION,
             mapping_registry_version=MAPPING_REGISTRY_VERSION,
             granularity="request",
             request_rows=rows,
-            missing_metrics=_collect_missing(rows),
-            source_manifest=manifest,
+            missing_metrics=missing_metrics,
+            source_manifest=source_manifest(
+                source_records,
+                external_tool,
+                granularity="request",
+                row_count=len(rows),
+                missing_metrics=missing_metrics,
+            ),
         )
 
     aggregate_records = coerce_aggregate_records(source_records.records)
@@ -109,14 +116,21 @@ def import_external_benchmark(
         )
         for index, raw_row in enumerate(aggregate_records)
     ]
+    missing_metrics = _collect_missing(rows)
     return ImportAdapterResult(
         tool=external_tool,
         adapter_version=ADAPTER_VERSION,
         mapping_registry_version=MAPPING_REGISTRY_VERSION,
         granularity="aggregate",
         summary_rows=rows,
-        missing_metrics=_collect_missing(rows),
-        source_manifest=manifest,
+        missing_metrics=missing_metrics,
+        source_manifest=source_manifest(
+            source_records,
+            external_tool,
+            granularity="aggregate",
+            row_count=len(rows),
+            missing_metrics=missing_metrics,
+        ),
     )
 
 
@@ -177,9 +191,17 @@ def coerce_aggregate_records(records: list[dict[str, Any]]) -> list[dict[str, An
     return [aggregate]
 
 
-def source_manifest(source_records: SourceRecordSet, external_tool: str) -> dict[str, Any]:
+def source_manifest(
+    source_records: SourceRecordSet,
+    external_tool: str,
+    *,
+    granularity: Literal["request", "aggregate"] | None = None,
+    row_count: int | None = None,
+    missing_metrics: list[str] | None = None,
+) -> dict[str, Any]:
     """Build public-safe source metadata for manifests or CLI wiring."""
-    return {
+    missing = sorted(set(missing_metrics or []))
+    manifest = {
         "schema_version": "1",
         "tool": external_tool,
         "adapter_version": ADAPTER_VERSION,
@@ -190,8 +212,24 @@ def source_manifest(source_records: SourceRecordSet, external_tool: str) -> dict
             "sha256": source_records.source_sha256,
             "sanitized_label": sanitize_source_label(source_records.source_file_name),
         },
+        "expected_metrics": _expected_metrics_by_granularity(external_tool),
+        "required_metrics": _required_metrics_by_granularity(external_tool),
+        "mapping_count": len(mappings_for(external_tool, "any")),
         "warnings": [],
     }
+    if granularity is not None:
+        required = required_metric_fields(external_tool, granularity)
+        manifest.update(
+            {
+                "granularity": granularity,
+                "row_count": row_count,
+                "missing_metrics": missing,
+                "missing_required_metrics": [
+                    metric for metric in missing if metric in set(required)
+                ],
+            }
+        )
+    return manifest
 
 
 def sanitize_source_label(source_file_name: str) -> str:
@@ -199,6 +237,20 @@ def sanitize_source_label(source_file_name: str) -> str:
     stem = Path(source_file_name).stem
     label = re.sub(r"[^a-z0-9]+", "-", stem.lower()).strip("-")
     return label or "import-source"
+
+
+def _expected_metrics_by_granularity(external_tool: str) -> dict[str, list[str]]:
+    return {
+        "request": expected_metric_fields(external_tool, "request"),
+        "aggregate": expected_metric_fields(external_tool, "aggregate"),
+    }
+
+
+def _required_metrics_by_granularity(external_tool: str) -> dict[str, list[str]]:
+    return {
+        "request": required_metric_fields(external_tool, "request"),
+        "aggregate": required_metric_fields(external_tool, "aggregate"),
+    }
 
 
 def _request_row(
