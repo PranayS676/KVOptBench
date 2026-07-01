@@ -10,6 +10,16 @@ from kvoptbench.strategy.advisor import (
 
 PUBLIC_RELEASE_DIR = Path("examples/public_release")
 
+ARCHITECTURE_DOCS = [
+    Path("docs/architecture/README.md"),
+    Path("docs/architecture/telemetry_lifecycle.md"),
+    Path("docs/architecture/environment_capture.md"),
+    Path("docs/architecture/import_adapters.md"),
+    Path("docs/architecture/strategy_plan_run.md"),
+    Path("docs/architecture/advisor_confidence.md"),
+    Path("docs/architecture/lmcache_scbench_extensions.md"),
+]
+
 
 def test_public_release_fixture_pack_renders_report_and_advisor(tmp_path: Path) -> None:
     required_files = [
@@ -213,6 +223,7 @@ def test_public_readiness_files_do_not_expose_internal_placeholders() -> None:
         Path("guides/datasets.md"),
         Path("guides/dataset_adapter_contract.md"),
         Path("guides/frontier_dataset_pack.md"),
+        *ARCHITECTURE_DOCS,
     ]
     combined = "\n".join(path.read_text(encoding="utf-8") for path in checked_files)
 
@@ -222,6 +233,81 @@ def test_public_readiness_files_do_not_expose_internal_placeholders() -> None:
     assert "OneDrive" not in combined
     assert "KVOptBench_Strategic_Direction_Memo.docx" not in combined
     assert "https://github.com/PranayS676/KVOptBench" in combined
+
+
+def test_architecture_docs_cover_non_gpu_design_backlog() -> None:
+    for path in ARCHITECTURE_DOCS:
+        assert path.exists(), f"Missing architecture doc: {path}"
+
+    readme = Path("README.md").read_text(encoding="utf-8")
+    telemetry = Path("docs/architecture/telemetry_lifecycle.md").read_text(encoding="utf-8")
+    environment = Path("docs/architecture/environment_capture.md").read_text(encoding="utf-8")
+    imports = Path("docs/architecture/import_adapters.md").read_text(encoding="utf-8")
+    strategy = Path("docs/architecture/strategy_plan_run.md").read_text(encoding="utf-8")
+    advisor = Path("docs/architecture/advisor_confidence.md").read_text(encoding="utf-8")
+    lmcache = Path("docs/architecture/lmcache_scbench_extensions.md").read_text(encoding="utf-8")
+
+    assert "docs/architecture/README.md" in readme
+
+    for required in [
+        "Prometheus",
+        "GPU sampler",
+        "missing_metrics",
+        "result package",
+        "No fabricated metrics",
+    ]:
+        assert required in telemetry
+
+    for required in [
+        "engine_version",
+        "model_revision",
+        "cuda_version",
+        "gpu_type",
+        "gpu_count",
+        "backend_launch_command",
+        "config_sha256",
+        "workload_sha256",
+    ]:
+        assert required in environment
+
+    for required in [
+        "vLLM bench",
+        "GenAI-Perf",
+        "AIPerf",
+        "metric mapping registry",
+        "source_type=imported",
+        "absolute local paths",
+    ]:
+        assert required in imports
+
+    for required in [
+        "strategy-plan",
+        "strategy-run",
+        "randomization",
+        "repetitions",
+        "confidence intervals",
+        "effect size",
+    ]:
+        assert required in strategy
+
+    for required in [
+        "workload-aware",
+        "quality gates",
+        "missing telemetry",
+        "Next-Experiment Command Generation",
+    ]:
+        assert required in advisor
+
+    for required in [
+        "LMCache",
+        "SCBench",
+        "KV Generation",
+        "Compression",
+        "Retrieval",
+        "Loading",
+        "does not implement",
+    ]:
+        assert required in lmcache
 
 
 def test_benchmark_methodology_guides_define_validity_and_metric_provenance() -> None:

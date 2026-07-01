@@ -125,6 +125,8 @@
 - First real benchmark guidance for randomized condition order, repeated trials, and confidence intervals
 - Real endpoint telemetry expectations for Prometheus and GPU memory capture
 - Result template fields for run order, repetitions, effect size, advisor confidence, and metric provenance
+- Public architecture notes for live telemetry, environment capture, import adapters, strategy plan/run,
+  workload-aware advisor confidence, and LMCache/SCBench-style extensions
 
 ## Done: Non-GPU Evidence Foundations
 

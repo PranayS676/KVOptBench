@@ -349,6 +349,11 @@ dataset rights, private prompt exposure, and endpoint metadata.
 - `examples/public_release/result_template.md`
 - `examples/public_release/blog_report_template.md`
 
+Public architecture notes for upcoming benchmark-credibility work live in
+`docs/architecture/README.md`. They cover live telemetry, environment capture,
+external benchmark imports, strategy planning/running, advisor confidence, and
+LMCache/SCBench-style extensions.
+
 ## Contributing
 
 Good contributions improve reproducibility, workload coverage, engine support, metric parsing,

@@ -20,7 +20,10 @@ venv/
 *.key
 
 # Local implementation/handoff docs
-docs/
+docs/*
+!docs/architecture/
+docs/architecture/*
+!docs/architecture/*.md
 CODEX_IMPLEMENTATION_BRIEF.md
 CODEX_PROMPT.md
 
