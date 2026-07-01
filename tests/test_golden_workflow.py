@@ -58,9 +58,10 @@ def test_init_cli_and_doctor_validate_golden_pack(tmp_path: Path) -> None:
     init_result = runner.invoke(app, ["init", "--output-dir", str(starter)])
 
     assert init_result.exit_code == 0, init_result.stdout
-    assert "golden_qasper_mock.yaml" in init_result.stdout
+    assert "Wrote config" in init_result.stdout
 
     config_path = starter / "configs" / "golden_qasper_mock.yaml"
+    assert config_path.exists()
     doctor_result = runner.invoke(
         app,
         ["doctor", "--config", str(config_path), "--skip-endpoint", "--json"],
