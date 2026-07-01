@@ -1,0 +1,238 @@
+"""Project scaffolding for the first KVOptBench benchmark run."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import yaml
+from pydantic import BaseModel
+
+from kvoptbench.datasets.hashing import sha256_file, sha256_text
+from kvoptbench.schemas import WorkloadItem, utc_now_iso
+
+QASPER_SOURCE_URL = "https://huggingface.co/datasets/allenai/qasper"
+GOLDEN_PROFILE_NAME = "golden_qasper_mock"
+
+
+class ScaffoldResult(BaseModel):
+    """Paths created by ``kvoptbench init``."""
+
+    root_dir: Path
+    config_path: Path
+    workload_path: Path
+    dataset_manifest_path: Path
+
+
+def scaffold_project(output_dir: str | Path, *, force: bool = False) -> ScaffoldResult:
+    """Write a small QASPER-shaped mock benchmark starter pack."""
+    root_dir = Path(output_dir)
+    config_path = root_dir / "configs" / f"{GOLDEN_PROFILE_NAME}.yaml"
+    workload_path = root_dir / "workloads" / "generated" / f"{GOLDEN_PROFILE_NAME}.jsonl"
+    dataset_manifest_path = (
+        root_dir / "workloads" / "generated" / f"{GOLDEN_PROFILE_NAME}_manifest.json"
+    )
+    readme_path = root_dir / "README.md"
+
+    _ensure_can_write(
+        [config_path, workload_path, dataset_manifest_path, readme_path],
+        force=force,
+    )
+    for directory in {
+        config_path.parent,
+        workload_path.parent,
+        dataset_manifest_path.parent,
+        root_dir / "results" / "raw",
+    }:
+        directory.mkdir(parents=True, exist_ok=True)
+
+    rows = _golden_workload_items()
+    _write_workload(workload_path, rows)
+    _write_manifest(dataset_manifest_path, workload_path, row_count=len(rows))
+    _write_config(config_path, root_dir, workload_path, dataset_manifest_path)
+    _write_readme(readme_path, config_path)
+
+    return ScaffoldResult(
+        root_dir=root_dir,
+        config_path=config_path,
+        workload_path=workload_path,
+        dataset_manifest_path=dataset_manifest_path,
+    )
+
+
+def _ensure_can_write(paths: list[Path], *, force: bool) -> None:
+    if force:
+        return
+    existing = [path for path in paths if path.exists()]
+    if existing:
+        formatted = ", ".join(path.as_posix() for path in existing)
+        raise FileExistsError(f"Refusing to overwrite existing starter files: {formatted}")
+
+
+def _write_workload(path: Path, rows: list[WorkloadItem]) -> None:
+    with path.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row.model_dump(mode="json"), ensure_ascii=False) + "\n")
+
+
+def _write_manifest(path: Path, workload_path: Path, *, row_count: int) -> None:
+    manifest = {
+        "schema_version": "1",
+        "adapter_name": GOLDEN_PROFILE_NAME,
+        "adapter_version": "1",
+        "dataset_name": "QASPER",
+        "dataset_source_url": QASPER_SOURCE_URL,
+        "source_url": QASPER_SOURCE_URL,
+        "dataset_revision": None,
+        "source_revision": None,
+        "license": "cc-by-4.0",
+        "license_review_status": "synthetic_public_safe_starter",
+        "redistribution_policy": "synthetic_qasper_shaped_examples_only",
+        "mode": "shared_prefix",
+        "row_count": row_count,
+        "workload_sha256": sha256_file(workload_path),
+        "prompt_template_hash": sha256_text(_prompt_template()),
+        "token_count_method": "char_approx_4",
+        "created_at": utc_now_iso(),
+        "known_limitations": [
+            "Starter rows are QASPER-shaped synthetic examples, not downloaded QASPER records.",
+            "Use kvoptbench dataset prepare for real public dataset workloads.",
+        ],
+    }
+    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+
+def _write_config(
+    path: Path,
+    root_dir: Path,
+    workload_path: Path,
+    dataset_manifest_path: Path,
+) -> None:
+    payload = {
+        "experiment_id": "golden_qasper_mock",
+        "official_run": False,
+        "provider": "mock",
+        "engine": "mock",
+        "endpoint_type": "mock",
+        "model_id": "mock-frontier-model",
+        "strategy": "baseline",
+        "base_url": "http://127.0.0.1:8000/v1",
+        "workload_file": workload_path.as_posix(),
+        "output_file": (root_dir / "results" / "raw" / "golden_qasper_mock.jsonl").as_posix(),
+        "concurrency": 1,
+        "max_tasks": 4,
+        "max_output_tokens": 64,
+        "timeout_seconds": 30,
+        "stream": True,
+        "metadata": {
+            "dataset": "qasper",
+            "dataset_manifest": dataset_manifest_path.as_posix(),
+            "profile": GOLDEN_PROFILE_NAME,
+            "purpose": "fresh-clone smoke test using the mock OpenAI-compatible endpoint",
+        },
+    }
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+
+def _write_readme(path: Path, config_path: Path) -> None:
+    text = (
+        "# KVOptBench Starter Pack\n\n"
+        "This directory was generated by `kvoptbench init`.\n\n"
+        "Run the mock server in one terminal:\n\n"
+        "```powershell\n"
+        "python -m kvoptbench.mock_server --port 8000\n"
+        "```\n\n"
+        "Then run the golden workflow:\n\n"
+        "```powershell\n"
+        f"kvoptbench doctor --config {config_path.as_posix()}\n"
+        f"kvoptbench workflow run --config {config_path.as_posix()} "
+        "--output-dir results/golden --package-dir results/packages/golden\n"
+        "```\n"
+    )
+    path.write_text(text, encoding="utf-8")
+
+
+def _golden_workload_items() -> list[WorkloadItem]:
+    papers = [
+        {
+            "paper_id": "paper-cache-001",
+            "title": "Cache-Aware Serving for Long Context Models",
+            "context": (
+                "This synthetic QASPER-style paper studies serving systems that reuse "
+                "attention memory across requests. The main finding is that shared "
+                "prefix workloads benefit when the engine preserves KV cache blocks "
+                "between related questions."
+            ),
+            "questions": [
+                (
+                    "What component is reused across related questions?",
+                    "KV cache blocks",
+                ),
+                (
+                    "Which workload shape benefits most in the example?",
+                    "shared prefix workloads",
+                ),
+            ],
+        },
+        {
+            "paper_id": "paper-memory-002",
+            "title": "Memory Pressure in Long Context Inference",
+            "context": (
+                "This synthetic QASPER-style paper compares prefill-heavy and "
+                "decode-heavy requests. It reports that long context prefill can "
+                "dominate latency when cache misses force the backend to ingest the "
+                "full document again."
+            ),
+            "questions": [
+                (
+                    "What can dominate latency for long context requests?",
+                    "long context prefill",
+                ),
+                (
+                    "What event forces the backend to ingest the full document again?",
+                    "cache misses",
+                ),
+            ],
+        },
+    ]
+    items: list[WorkloadItem] = []
+    for paper in papers:
+        prefix = f"Title: {paper['title']}\n\nPaper excerpt:\n{paper['context']}"
+        shared_prefix_tokens = _estimate_tokens(prefix)
+        for question_index, (question, answer) in enumerate(paper["questions"], start=1):
+            prompt = _prompt_template().format(prefix=prefix, question=question)
+            items.append(
+                WorkloadItem(
+                    task_id=f"qasper_golden_{paper['paper_id']}_{question_index}",
+                    workload="qasper_shared_prefix",
+                    category="prefix_cache",
+                    prompt=prompt,
+                    expected_answer=answer,
+                    target_input_tokens=_estimate_tokens(prompt),
+                    target_output_tokens=32,
+                    prefix_group_id=f"qasper_golden_{paper['paper_id']}",
+                    shared_prefix_tokens=shared_prefix_tokens,
+                    eval_type="contains_expected",
+                    metadata={
+                        "dataset": "qasper",
+                        "dataset_source_url": QASPER_SOURCE_URL,
+                        "starter_profile": GOLDEN_PROFILE_NAME,
+                        "synthetic": True,
+                        "source_document_id": paper["paper_id"],
+                        "source_question_id": f"q{question_index}",
+                        "shared_prefix_ratio": 1.0,
+                    },
+                )
+            )
+    return items
+
+
+def _prompt_template() -> str:
+    return (
+        "You are given a paper excerpt. Answer the question using only the paper context.\n\n"
+        "Paper:\n{prefix}\n\nQuestion: {question}\nAnswer:"
+    )
+
+
+def _estimate_tokens(text: str) -> int:
+    return max(1, len(text) // 4)

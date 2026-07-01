@@ -14,7 +14,9 @@ from kvoptbench.config import ConfigError, validate_config
 
 app = typer.Typer(help="KVOptBench cache-aware LLM inference benchmark.")
 dataset_app = typer.Typer(help="Prepare public dataset workloads.")
+workflow_app = typer.Typer(help="Run end-to-end benchmark workflows.")
 app.add_typer(dataset_app, name="dataset")
+app.add_typer(workflow_app, name="workflow")
 
 
 @app.command("validate-config")
@@ -48,6 +50,111 @@ def endpoint_check_command(
         raise typer.Exit(code=1)
     models = ", ".join(health.model_ids) if health.model_ids else "models unavailable"
     print(f"[green]OK[/green] {health.url} ({models})")
+
+
+@app.command("init")
+def init_command(
+    output_dir: Path = typer.Option(
+        Path(".kvoptbench-starter"),
+        "--output-dir",
+        help="Directory where starter configs, workloads, and manifests will be written.",
+    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite generated starter files."),
+) -> None:
+    """Scaffold a golden QASPER/mock starter benchmark pack."""
+    from kvoptbench.init import scaffold_project
+
+    try:
+        result = scaffold_project(output_dir, force=force)
+    except FileExistsError as exc:
+        print(f"[red]FAILED[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    print(f"[green]Wrote config[/green] {result.config_path}")
+    print(f"[green]Wrote workload[/green] {result.workload_path}")
+    print(f"[green]Wrote dataset manifest[/green] {result.dataset_manifest_path}")
+
+
+@app.command("doctor")
+def doctor_command(
+    config: Path = typer.Option(..., "--config", "-c", help="Experiment YAML config."),
+    skip_endpoint: bool = typer.Option(
+        False,
+        "--skip-endpoint",
+        help="Validate local files and environment without probing the endpoint.",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON.",
+    ),
+) -> None:
+    """Run preflight checks for config, workload, telemetry, endpoint, and environment."""
+    from kvoptbench.doctor import run_doctor
+
+    report = run_doctor(config, check_endpoint=not skip_endpoint)
+    if json_output:
+        typer.echo(json.dumps(report.model_dump(mode="json"), indent=2))
+    else:
+        for check in report.checks:
+            color = {
+                "ok": "green",
+                "warn": "yellow",
+                "fail": "red",
+                "skipped": "cyan",
+            }[check.status]
+            print(f"[{color}]{check.status.upper()}[/{color}] {check.name}: {check.message}")
+    if not report.ok:
+        raise typer.Exit(code=1)
+
+
+@workflow_app.command("run")
+def workflow_run_command(
+    config: Path = typer.Option(..., "--config", "-c", help="Experiment YAML config."),
+    output_dir: Path = typer.Option(
+        ...,
+        "--output-dir",
+        help="Directory for summary, report, and advisor outputs.",
+    ),
+    package_dir: Path | None = typer.Option(
+        None,
+        "--package-dir",
+        help="Optional result package output directory.",
+    ),
+    dataset_manifest: list[Path] = typer.Option(
+        [],
+        "--dataset-manifest",
+        help="Dataset manifest JSON file. Can be repeated.",
+    ),
+    run_name: str | None = typer.Option(None, "--run-name"),
+    skip_run: bool = typer.Option(
+        False,
+        "--skip-run",
+        help="Reuse the config output_file instead of running the endpoint.",
+    ),
+) -> None:
+    """Run one config through run, summarize, report, advisor, and package steps."""
+    from kvoptbench.workflow import run_config_workflow
+
+    try:
+        result = run_config_workflow(
+            config,
+            output_dir=output_dir,
+            package_dir=package_dir,
+            dataset_manifest_paths=dataset_manifest,
+            run_name=run_name,
+            skip_run=skip_run,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[red]FAILED[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    print(f"[green]Wrote raw results[/green] {result.raw_results_path}")
+    print(f"[green]Wrote summary[/green] {result.summary_path}")
+    print(f"[green]Wrote report[/green] {result.report_path}")
+    print(f"[green]Wrote strategy advisor JSON[/green] {result.strategy_json_path}")
+    print(f"[green]Wrote strategy advisor markdown[/green] {result.strategy_markdown_path}")
+    if result.package_manifest_path is not None:
+        print(f"[green]Wrote result package[/green] {result.package_dir}")
+        print(f"[green]Wrote package manifest[/green] {result.package_manifest_path}")
 
 
 @app.command("engine-command")

@@ -1,0 +1,20 @@
+experiment_id: golden_qasper_mock
+official_run: false
+provider: mock
+engine: mock
+endpoint_type: mock
+model_id: mock-frontier-model
+strategy: baseline
+base_url: http://127.0.0.1:8000/v1
+workload_file: .kvoptbench-starter/workloads/generated/golden_qasper_mock.jsonl
+output_file: .kvoptbench-starter/results/raw/golden_qasper_mock.jsonl
+concurrency: 1
+max_tasks: 4
+max_output_tokens: 64
+timeout_seconds: 30
+stream: true
+metadata:
+  dataset: qasper
+  dataset_manifest: .kvoptbench-starter/workloads/generated/golden_qasper_mock_manifest.json
+  profile: golden_qasper_mock
+  purpose: fresh-clone smoke test using the mock OpenAI-compatible endpoint
