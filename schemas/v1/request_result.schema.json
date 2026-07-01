@@ -1,0 +1,866 @@
+{
+  "$defs": {
+    "MetricProvenance": {
+      "description": "Explain where a metric came from and why it may be unavailable.",
+      "properties": {
+        "available": {
+          "default": true,
+          "title": "Available",
+          "type": "boolean"
+        },
+        "measurement_method": {
+          "title": "Measurement Method",
+          "type": "string"
+        },
+        "missing_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Missing Reason"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "provider_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Field"
+        },
+        "source_type": {
+          "enum": [
+            "client_observed",
+            "provider_reported",
+            "engine_reported",
+            "gpu_reported",
+            "imported",
+            "derived",
+            "estimated"
+          ],
+          "title": "Source Type",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "source_type",
+        "measurement_method"
+      ],
+      "title": "MetricProvenance",
+      "type": "object"
+    },
+    "RunEnvironmentSnapshot": {
+      "description": "Reproducibility metadata captured once per experiment run.",
+      "properties": {
+        "backend_launch_command": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backend Launch Command"
+        },
+        "config_sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Sha256"
+        },
+        "cuda_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cuda Version"
+        },
+        "engine_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engine Version"
+        },
+        "git_branch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Git Branch"
+        },
+        "git_commit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Git Commit"
+        },
+        "git_dirty": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Git Dirty"
+        },
+        "gpu_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gpu Count"
+        },
+        "gpu_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gpu Type"
+        },
+        "kvoptbench_version": {
+          "title": "Kvoptbench Version",
+          "type": "string"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        },
+        "model_revision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Revision"
+        },
+        "package_versions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Package Versions",
+          "type": "object"
+        },
+        "platform": {
+          "title": "Platform",
+          "type": "string"
+        },
+        "platform_machine": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Platform Machine"
+        },
+        "platform_release": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Platform Release"
+        },
+        "python_version": {
+          "title": "Python Version",
+          "type": "string"
+        },
+        "workload_sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Workload Sha256"
+        }
+      },
+      "required": [
+        "python_version",
+        "platform",
+        "kvoptbench_version"
+      ],
+      "title": "RunEnvironmentSnapshot",
+      "type": "object"
+    },
+    "ToolCallRecord": {
+      "description": "Structured tool-call output captured from OpenAI-compatible responses.",
+      "properties": {
+        "arguments": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Arguments"
+        },
+        "arguments_json": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Arguments Json"
+        },
+        "arguments_parse_error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Arguments Parse Error"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "index": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Index"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "type": {
+          "default": "function",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "ToolCallRecord",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Required request-level JSONL result row.",
+  "properties": {
+    "cache_hit_proxy": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cache Hit Proxy"
+    },
+    "cache_hit_rate": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cache Hit Rate"
+    },
+    "cache_miss_penalty_ms": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cache Miss Penalty Ms"
+    },
+    "cache_state": {
+      "default": "na",
+      "enum": [
+        "cold",
+        "warm",
+        "na"
+      ],
+      "title": "Cache State",
+      "type": "string"
+    },
+    "concurrency": {
+      "title": "Concurrency",
+      "type": "integer"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "e2e_latency_ms": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "E2E Latency Ms"
+    },
+    "engine": {
+      "title": "Engine",
+      "type": "string"
+    },
+    "engine_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Engine Version"
+    },
+    "environment": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunEnvironmentSnapshot"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "error_message": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Message"
+    },
+    "error_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Type"
+    },
+    "experiment_id": {
+      "title": "Experiment Id",
+      "type": "string"
+    },
+    "finish_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Finish Reason"
+    },
+    "first_reasoning_token_ms": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "First Reasoning Token Ms"
+    },
+    "gpu_count": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Gpu Count"
+    },
+    "gpu_memory_peak_gb": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Gpu Memory Peak Gb"
+    },
+    "gpu_memory_used_gb": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Gpu Memory Used Gb"
+    },
+    "gpu_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Gpu Type"
+    },
+    "input_tokens": {
+      "default": 0,
+      "title": "Input Tokens",
+      "type": "integer"
+    },
+    "input_tokens_per_second": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Input Tokens Per Second"
+    },
+    "itl_ms": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Itl Ms"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    },
+    "metric_provenance": {
+      "additionalProperties": {
+        "$ref": "#/$defs/MetricProvenance"
+      },
+      "title": "Metric Provenance",
+      "type": "object"
+    },
+    "missing_metrics": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Missing Metrics",
+      "type": "array"
+    },
+    "model_id": {
+      "title": "Model Id",
+      "type": "string"
+    },
+    "official_run": {
+      "default": false,
+      "title": "Official Run",
+      "type": "boolean"
+    },
+    "output_tokens": {
+      "default": 0,
+      "title": "Output Tokens",
+      "type": "integer"
+    },
+    "output_tokens_per_second": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Output Tokens Per Second"
+    },
+    "provider": {
+      "title": "Provider",
+      "type": "string"
+    },
+    "provider_completion_tokens": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Provider Completion Tokens"
+    },
+    "quality_method": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Quality Method"
+    },
+    "quality_score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Quality Score"
+    },
+    "reasoning_content_present": {
+      "default": false,
+      "title": "Reasoning Content Present",
+      "type": "boolean"
+    },
+    "reasoning_tokens": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reasoning Tokens"
+    },
+    "request_rate": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Rate"
+    },
+    "requests_per_second": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Requests Per Second"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "shared_prefix_tokens": {
+      "default": 0,
+      "title": "Shared Prefix Tokens",
+      "type": "integer"
+    },
+    "strategy": {
+      "title": "Strategy",
+      "type": "string"
+    },
+    "success": {
+      "default": true,
+      "title": "Success",
+      "type": "boolean"
+    },
+    "target_input_tokens": {
+      "default": 0,
+      "title": "Target Input Tokens",
+      "type": "integer"
+    },
+    "target_output_tokens": {
+      "default": 0,
+      "title": "Target Output Tokens",
+      "type": "integer"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "telemetry_run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Telemetry Run Id"
+    },
+    "telemetry_snapshots_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Telemetry Snapshots Path"
+    },
+    "telemetry_summary_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Telemetry Summary Path"
+    },
+    "token_count_method": {
+      "default": "char_approx_4",
+      "title": "Token Count Method",
+      "type": "string"
+    },
+    "tool_call_count": {
+      "default": 0,
+      "title": "Tool Call Count",
+      "type": "integer"
+    },
+    "tool_call_names": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tool Call Names",
+      "type": "array"
+    },
+    "tool_calls": {
+      "items": {
+        "$ref": "#/$defs/ToolCallRecord"
+      },
+      "title": "Tool Calls",
+      "type": "array"
+    },
+    "tpot_ms": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tpot Ms"
+    },
+    "ttft_ms": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ttft Ms"
+    },
+    "visible_answer_missing": {
+      "default": false,
+      "title": "Visible Answer Missing",
+      "type": "boolean"
+    },
+    "workload": {
+      "title": "Workload",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "experiment_id",
+    "provider",
+    "engine",
+    "model_id",
+    "strategy",
+    "workload",
+    "task_id",
+    "concurrency"
+  ],
+  "title": "RequestResult",
+  "type": "object",
+  "x-kvoptbench-contract": "request_result",
+  "x-kvoptbench-schema-version": "1"
+}

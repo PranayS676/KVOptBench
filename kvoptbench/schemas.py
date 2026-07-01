@@ -8,6 +8,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+SUPPORTED_SCHEMA_VERSIONS = ("1",)
+
 
 def utc_now_iso() -> str:
     """Return an ISO-8601 UTC timestamp with a stable timezone marker."""
@@ -335,6 +337,7 @@ class CacheExperimentCase(BaseModel):
 class RequestResult(BaseModel):
     """Required request-level JSONL result row."""
 
+    schema_version: str = "1"
     run_id: str
     experiment_id: str
     official_run: bool = False
@@ -390,6 +393,14 @@ class RequestResult(BaseModel):
     metric_provenance: dict[str, MetricProvenance] = Field(default_factory=dict)
     environment: RunEnvironmentSnapshot | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("schema_version")
+    @classmethod
+    def _supported_schema_version(cls, value: str) -> str:
+        if value not in SUPPORTED_SCHEMA_VERSIONS:
+            valid = ", ".join(SUPPORTED_SCHEMA_VERSIONS)
+            raise ValueError(f"unsupported schema_version '{value}'; supported: {valid}")
+        return value
 
 
 class MockMetrics(BaseModel):
