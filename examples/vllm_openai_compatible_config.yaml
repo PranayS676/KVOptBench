@@ -21,6 +21,7 @@ retry_backoff_seconds: 0.5
 capture_response_headers: true
 stream: true
 telemetry:
+  profile: vllm_live
   enabled: false
   output_dir: results/telemetry
   prometheus:

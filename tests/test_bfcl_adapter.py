@@ -27,10 +27,11 @@ def test_bfcl_adapter_prepares_tool_calling_fixture(tmp_path: Path) -> None:
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
 
     assert result.row_count == 1
-    assert items[0].eval_type == "tool_calling"
+    assert items[0].eval_type == "bfcl_tool_call"
     assert items[0].expected_answer == "lookup_order"
     assert items[0].expected_schema["required"] == ["tool", "arguments"]
     assert items[0].metadata["openai_tools"][0]["function"]["name"] == "lookup_order"
+    assert items[0].metadata["expected_function_name"] == "lookup_order"
     assert items[0].metadata["tool_choice"] == "auto"
     assert manifest["adapter_name"] == "bfcl"
 

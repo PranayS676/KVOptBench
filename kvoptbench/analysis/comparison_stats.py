@@ -6,7 +6,11 @@ from typing import Any
 
 import pandas as pd
 
-from kvoptbench.analysis.statistics import flatten_metric_stats, mean_effect_size_from_stats
+from kvoptbench.analysis.statistics import (
+    comparison_methodology_status,
+    flatten_metric_stats,
+    mean_effect_size_from_stats,
+)
 
 
 REPEATED_COMPARISON_SUFFIXES = ("count", "std", "ci95_low", "ci95_high", "stats_status")
@@ -33,6 +37,8 @@ def repeated_comparison_columns(
             columns.append(f"{baseline_prefix}_{suffix}")
             columns.append(f"{candidate_prefix}_{suffix}")
         columns.append(f"{effect_prefix}_effect_size")
+        columns.append(f"{effect_prefix}_methodology_status")
+        columns.append(f"{effect_prefix}_methodology_caveats")
     return columns
 
 
@@ -58,6 +64,14 @@ def repeated_comparison_fields(
         candidate_std=candidate.get(f"{source_metric}_std"),
         candidate_count=candidate.get(f"{source_metric}_count"),
     )
+    status, caveats = comparison_methodology_status(
+        baseline_count=fields.get(f"{baseline_prefix}_count"),
+        candidate_count=fields.get(f"{candidate_prefix}_count"),
+        baseline_stats_status=fields.get(f"{baseline_prefix}_stats_status"),
+        candidate_stats_status=fields.get(f"{candidate_prefix}_stats_status"),
+    )
+    fields[f"{effect_prefix}_methodology_status"] = status
+    fields[f"{effect_prefix}_methodology_caveats"] = "; ".join(caveats)
     return fields
 
 

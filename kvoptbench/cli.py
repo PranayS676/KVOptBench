@@ -14,7 +14,13 @@ from kvoptbench.config import ConfigError, validate_config
 
 app = typer.Typer(help="KVOptBench cache-aware LLM inference benchmark.")
 dataset_app = typer.Typer(help="Prepare public dataset workloads.")
+workflow_app = typer.Typer(help="Run end-to-end benchmark workflows.")
+schema_app = typer.Typer(help="Export and check artifact contract schemas.")
+telemetry_profile_app = typer.Typer(help="Inspect reusable telemetry profile defaults.")
 app.add_typer(dataset_app, name="dataset")
+app.add_typer(workflow_app, name="workflow")
+app.add_typer(schema_app, name="schema")
+app.add_typer(telemetry_profile_app, name="telemetry-profile")
 
 
 @app.command("validate-config")
@@ -27,6 +33,33 @@ def validate_config_command(
     except ConfigError as exc:
         raise typer.BadParameter(str(exc)) from exc
     print(f"[green]OK[/green] {config} -> {parsed.experiment_id}")
+
+
+@app.command("version")
+def version_command() -> None:
+    """Print the installed KVOptBench version."""
+    from kvoptbench import __version__
+
+    print(f"KVOptBench {__version__}")
+
+
+@app.command("release-check")
+def release_check_command(
+    repo_dir: Path = typer.Option(Path("."), "--repo-dir", help="Repository root to check."),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+) -> None:
+    """Run local public-release readiness checks."""
+    from kvoptbench.release import run_release_check
+
+    report = run_release_check(repo_dir)
+    if json_output:
+        typer.echo(json.dumps(report.model_dump(mode="json"), indent=2))
+    else:
+        for check in report.checks:
+            color = "green" if check.status == "ok" else "red"
+            print(f"[{color}]{check.status.upper()}[/{color}] {check.name}: {check.message}")
+    if not report.ok:
+        raise typer.Exit(code=1)
 
 
 @app.command("endpoint-check")
@@ -48,6 +81,227 @@ def endpoint_check_command(
         raise typer.Exit(code=1)
     models = ", ".join(health.model_ids) if health.model_ids else "models unavailable"
     print(f"[green]OK[/green] {health.url} ({models})")
+
+
+@app.command("init")
+def init_command(
+    output_dir: Path = typer.Option(
+        Path(".kvoptbench-starter"),
+        "--output-dir",
+        help="Directory where starter configs, workloads, and manifests will be written.",
+    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite generated starter files."),
+) -> None:
+    """Scaffold a golden QASPER/mock starter benchmark pack."""
+    from kvoptbench.init import scaffold_project
+
+    try:
+        result = scaffold_project(output_dir, force=force)
+    except FileExistsError as exc:
+        print(f"[red]FAILED[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    print(f"[green]Wrote config[/green] {result.config_path}")
+    print(f"[green]Wrote workload[/green] {result.workload_path}")
+    print(f"[green]Wrote dataset manifest[/green] {result.dataset_manifest_path}")
+
+
+@app.command("doctor")
+def doctor_command(
+    config: Path = typer.Option(..., "--config", "-c", help="Experiment YAML config."),
+    skip_endpoint: bool = typer.Option(
+        False,
+        "--skip-endpoint",
+        help="Validate local files and environment without probing the endpoint.",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit machine-readable JSON.",
+    ),
+) -> None:
+    """Run preflight checks for config, workload, telemetry, endpoint, and environment."""
+    from kvoptbench.doctor import run_doctor
+
+    report = run_doctor(config, check_endpoint=not skip_endpoint)
+    if json_output:
+        typer.echo(json.dumps(report.model_dump(mode="json"), indent=2))
+    else:
+        for check in report.checks:
+            color = {
+                "ok": "green",
+                "warn": "yellow",
+                "fail": "red",
+                "skipped": "cyan",
+            }[check.status]
+            print(f"[{color}]{check.status.upper()}[/{color}] {check.name}: {check.message}")
+    if not report.ok:
+        raise typer.Exit(code=1)
+
+
+@app.command("validate-results")
+def validate_results_command(
+    input: Path = typer.Option(..., "--input", "-i", help="Result JSONL file or directory."),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+) -> None:
+    """Validate request-level JSONL result rows against the stable contract."""
+    from kvoptbench.contracts import validate_result_rows
+
+    report = validate_result_rows(input)
+    if json_output:
+        typer.echo(json.dumps(report.model_dump(mode="json"), indent=2))
+    else:
+        _print_validation_report(report.model_dump(mode="json"))
+    if not report.ok:
+        raise typer.Exit(code=1)
+
+
+@app.command("validate-package")
+def validate_package_command(
+    path: Path = typer.Option(..., "--path", help="Result package directory."),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+) -> None:
+    """Validate a result package manifest and package-relative artifact hashes."""
+    from kvoptbench.contracts import validate_result_package
+
+    report = validate_result_package(path)
+    if json_output:
+        typer.echo(json.dumps(report.model_dump(mode="json"), indent=2))
+    else:
+        _print_validation_report(report.model_dump(mode="json"))
+    if not report.ok:
+        raise typer.Exit(code=1)
+
+
+@schema_app.command("export")
+def schema_export_command(
+    output_dir: Path = typer.Option(..., "--output-dir", help="Directory for schema files."),
+    check: bool = typer.Option(False, "--check", help="Fail if committed schemas are stale."),
+) -> None:
+    """Export JSON Schema files for stable KVOptBench artifacts."""
+    from kvoptbench.contracts import check_schema_files, write_schema_files
+
+    if check:
+        mismatches = check_schema_files(output_dir)
+        if mismatches:
+            for mismatch in mismatches:
+                print(f"[red]FAILED[/red] {mismatch}")
+            raise typer.Exit(code=1)
+        print("[green]Schema snapshots are current[/green]")
+        return
+
+    written = write_schema_files(output_dir)
+    for name, path in written.items():
+        print(f"[green]Wrote schema[/green] {name}: {path}")
+
+
+@telemetry_profile_app.command("list")
+def telemetry_profile_list_command(
+    profile_path: Path | None = typer.Option(
+        None,
+        "--profile-path",
+        help="Optional YAML file with additional or overriding telemetry profiles.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+) -> None:
+    """List built-in and optional user telemetry profiles."""
+    from kvoptbench.telemetry.profiles import load_telemetry_profiles, profile_to_dict
+
+    try:
+        profiles = load_telemetry_profiles(profile_path)
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    payload = {"profiles": [profile_to_dict(profile) for profile in profiles.values()]}
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2))
+        return
+    for profile in profiles.values():
+        print(f"[bold]{profile.name}[/bold] - {profile.description}")
+
+
+@telemetry_profile_app.command("show")
+def telemetry_profile_show_command(
+    profile: str = typer.Option(..., "--profile", "-p", help="Telemetry profile name."),
+    profile_path: Path | None = typer.Option(
+        None,
+        "--profile-path",
+        help="Optional YAML file with additional or overriding telemetry profiles.",
+    ),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Write the profile to a file."),
+    json_output: bool = typer.Option(False, "--json", help="Emit JSON instead of YAML."),
+) -> None:
+    """Show one telemetry profile as reusable config."""
+    import yaml
+
+    from kvoptbench.telemetry.profiles import get_telemetry_profile, profile_to_dict
+
+    try:
+        selected = get_telemetry_profile(profile, profile_path=profile_path)
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    payload = profile_to_dict(selected)
+    text = (
+        json.dumps(payload, indent=2) + "\n"
+        if json_output
+        else yaml.safe_dump(payload, sort_keys=False)
+    )
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(text, encoding="utf-8")
+        print(f"[green]Wrote telemetry profile[/green] {output}")
+        return
+    typer.echo(text, nl=False)
+
+
+@workflow_app.command("run")
+def workflow_run_command(
+    config: Path = typer.Option(..., "--config", "-c", help="Experiment YAML config."),
+    output_dir: Path = typer.Option(
+        ...,
+        "--output-dir",
+        help="Directory for summary, report, and advisor outputs.",
+    ),
+    package_dir: Path | None = typer.Option(
+        None,
+        "--package-dir",
+        help="Optional result package output directory.",
+    ),
+    dataset_manifest: list[Path] = typer.Option(
+        [],
+        "--dataset-manifest",
+        help="Dataset manifest JSON file. Can be repeated.",
+    ),
+    run_name: str | None = typer.Option(None, "--run-name"),
+    skip_run: bool = typer.Option(
+        False,
+        "--skip-run",
+        help="Reuse the config output_file instead of running the endpoint.",
+    ),
+) -> None:
+    """Run one config through run, summarize, report, advisor, and package steps."""
+    from kvoptbench.workflow import run_config_workflow
+
+    try:
+        result = run_config_workflow(
+            config,
+            output_dir=output_dir,
+            package_dir=package_dir,
+            dataset_manifest_paths=dataset_manifest,
+            run_name=run_name,
+            skip_run=skip_run,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[red]FAILED[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    print(f"[green]Wrote raw results[/green] {result.raw_results_path}")
+    print(f"[green]Wrote summary[/green] {result.summary_path}")
+    print(f"[green]Wrote report[/green] {result.report_path}")
+    print(f"[green]Wrote strategy advisor JSON[/green] {result.strategy_json_path}")
+    print(f"[green]Wrote strategy advisor markdown[/green] {result.strategy_markdown_path}")
+    if result.package_manifest_path is not None:
+        print(f"[green]Wrote result package[/green] {result.package_dir}")
+        print(f"[green]Wrote package manifest[/green] {result.package_manifest_path}")
 
 
 @app.command("engine-command")
@@ -609,6 +863,40 @@ def run_command(
     print(f"[green]Wrote results[/green] {output}")
 
 
+@app.command("import-mappings")
+def import_mappings_command(
+    tool: Literal["vllm-bench", "genai-perf", "aiperf"] | None = typer.Option(
+        None,
+        "--tool",
+        help="Optional external benchmark tool to filter mappings.",
+    ),
+    granularity: Literal["any", "request", "aggregate"] = typer.Option(
+        "any",
+        "--granularity",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+) -> None:
+    """Inspect the external benchmark metric mapping registry."""
+    from kvoptbench.importers.metrics import mapping_registry_payload
+
+    payload = mapping_registry_payload(
+        external_tool=_external_import_tool_key(tool) if tool is not None else None,
+        granularity=granularity,
+    )
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2))
+        return
+    print(
+        f"[bold]Mapping registry v{payload['mapping_registry_version']}[/bold] "
+        f"tool={payload['tool'] or 'all'} granularity={payload['granularity']}"
+    )
+    for mapping in payload["mappings"]:
+        print(
+            f"{mapping['external_tool']} -> {mapping['normalized_field']} "
+            f"({', '.join(mapping['aliases'])})"
+        )
+
+
 @app.command("import")
 def import_command(
     tool: Literal["vllm-bench", "genai-perf", "aiperf"] = typer.Option(..., "--tool"),
@@ -630,7 +918,10 @@ def import_command(
 ) -> None:
     """Import external benchmark artifacts without claiming KVOptBench ran them."""
     try:
+        external_tool = _external_import_tool_key(tool)
         if tool == "vllm-bench":
+            from kvoptbench.importers.external import source_manifest
+            from kvoptbench.importers.reader import read_source_records
             from kvoptbench.importers.vllm_bench import import_vllm_bench
 
             rows = import_vllm_bench(
@@ -645,14 +936,23 @@ def import_command(
                 concurrency=concurrency,
             )
             missing_metrics = _collect_import_missing_metrics(rows)
-            _write_jsonl(output, rows)
-            manifest = _basic_import_manifest(
-                tool=tool,
-                source=source,
+            missing_required = _missing_required_import_metrics(
+                external_tool,
+                granularity="request",
+                missing_metrics=missing_metrics,
+            )
+            if fail_on_missing_required and missing_required:
+                raise ValueError(
+                    "Missing required imported metrics: " + ", ".join(missing_required)
+                )
+            manifest = source_manifest(
+                read_source_records(source),
+                external_tool,
                 granularity="request",
                 row_count=len(rows),
                 missing_metrics=missing_metrics,
             )
+            _write_jsonl(output, rows)
             written_kind = "request JSONL"
         else:
             from kvoptbench.importers.aiperf import import_aiperf
@@ -673,6 +973,15 @@ def import_command(
             )
             missing_metrics = result.missing_metrics
             manifest = result.source_manifest
+            missing_required = _missing_required_import_metrics(
+                external_tool,
+                granularity=result.granularity,
+                missing_metrics=missing_metrics,
+            )
+            if fail_on_missing_required and missing_required:
+                raise ValueError(
+                    "Missing required imported metrics: " + ", ".join(missing_required)
+                )
             if result.granularity == "request":
                 _write_jsonl(output, result.request_rows)
                 written_kind = "request JSONL"
@@ -683,8 +992,6 @@ def import_command(
         if manifest_output is not None:
             manifest_output.parent.mkdir(parents=True, exist_ok=True)
             manifest_output.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-        if fail_on_missing_required and missing_metrics:
-            raise ValueError("Missing imported metrics: " + ", ".join(missing_metrics))
     except (FileNotFoundError, ValueError) as exc:
         print(f"[red]FAILED[/red] {exc}")
         raise typer.Exit(code=1) from exc
@@ -752,6 +1059,7 @@ def strategy_run_command(
     repeat_count: int | None = typer.Option(None, "--repeat-count", min=1),
     randomization_seed: int | None = typer.Option(None, "--randomization-seed"),
     randomize: bool = typer.Option(False, "--randomize"),
+    block_randomization: bool = typer.Option(False, "--block-randomization"),
     dry_run: bool = typer.Option(False, "--dry-run"),
 ) -> None:
     """Run or dry-run a strategy matrix through a deterministic schedule."""
@@ -764,6 +1072,7 @@ def strategy_run_command(
             repeat_count=repeat_count,
             randomization_seed=randomization_seed,
             randomize=randomize,
+            block_randomization=block_randomization,
             dry_run=dry_run,
         )
     except (FileNotFoundError, ValueError) as exc:
@@ -894,6 +1203,7 @@ def strategy_select_command(
 @app.command("strategy-recommend")
 def strategy_recommend_command(
     summary: Path = typer.Option(..., "--summary", help="Required summary CSV."),
+    advisor_config: Path | None = typer.Option(None, "--advisor-config"),
     cache_input: Path | None = typer.Option(None, "--cache-input"),
     prefix_sweep_input: Path | None = typer.Option(None, "--prefix-sweep-input"),
     prefill_decode_input: Path | None = typer.Option(None, "--prefill-decode-input"),
@@ -913,6 +1223,7 @@ def strategy_recommend_command(
 
     report = build_strategy_advisor_report(
         summary_path=summary,
+        advisor_config_path=advisor_config,
         cache_input_path=cache_input,
         prefix_sweep_input_path=prefix_sweep_input,
         prefill_decode_input_path=prefill_decode_input,
@@ -940,6 +1251,20 @@ def _parse_context_buckets(raw: str | None) -> tuple[int, ...] | None:
     if raw is None or not raw.strip():
         return None
     return tuple(int(value.strip()) for value in raw.split(",") if value.strip())
+
+
+def _print_validation_report(report: dict[str, Any]) -> None:
+    status = "OK" if report.get("ok") else "FAILED"
+    color = "green" if report.get("ok") else "red"
+    print(
+        f"[{color}]{status}[/{color}] {report.get('artifact_type')} "
+        f"checked_files={report.get('checked_files')} rows={report.get('row_count')}"
+    )
+    for error in report.get("errors", []):
+        location = error.get("file", "<unknown>")
+        if error.get("line") is not None:
+            location = f"{location}:{error['line']}"
+        print(f"[red]- {location}: {error.get('message')}[/red]")
 
 
 def _parse_csv_strings(raw: str | None) -> tuple[str, ...]:
@@ -979,22 +1304,24 @@ def _collect_import_missing_metrics(rows: list[dict[str, Any]]) -> list[str]:
     return sorted(missing)
 
 
-def _basic_import_manifest(
-    *,
-    tool: str,
-    source: Path,
-    granularity: str,
-    row_count: int,
-    missing_metrics: list[str],
-) -> dict[str, Any]:
+def _external_import_tool_key(tool: str | None) -> str:
     return {
-        "schema_version": "1",
-        "tool": tool,
-        "source": {"file_name": source.name},
-        "granularity": granularity,
-        "row_count": row_count,
-        "missing_metrics": missing_metrics,
-    }
+        "vllm-bench": "vllm_bench",
+        "genai-perf": "genai_perf",
+        "aiperf": "aiperf",
+    }[str(tool)]
+
+
+def _missing_required_import_metrics(
+    external_tool: str,
+    *,
+    granularity: Literal["request", "aggregate"],
+    missing_metrics: list[str],
+) -> list[str]:
+    from kvoptbench.importers.metrics import required_metric_fields
+
+    required = set(required_metric_fields(external_tool, granularity))
+    return [metric for metric in missing_metrics if metric in required]
 
 
 if __name__ == "__main__":

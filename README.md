@@ -105,13 +105,36 @@ python -m pip install -e ".[dev,data]"
 
 The mock path validates the benchmark harness without a GPU, RunPod, model weights, or external API keys.
 
+Create the golden QASPER-shaped starter pack:
+
+```bash
+kvoptbench init --output-dir .kvoptbench-starter
+```
+
 Start the mock server:
 
 ```bash
 python -m kvoptbench.mock_server --port 8000
 ```
 
-In another terminal:
+In another terminal, run the preflight checks and complete artifact workflow:
+
+```bash
+kvoptbench doctor --config .kvoptbench-starter/configs/golden_qasper_mock.yaml
+kvoptbench workflow run \
+  --config .kvoptbench-starter/configs/golden_qasper_mock.yaml \
+  --output-dir results/golden \
+  --package-dir results/packages/golden \
+  --run-name golden-qasper-mock
+kvoptbench validate-results --input .kvoptbench-starter/results/raw
+kvoptbench validate-package --path results/packages/golden
+```
+
+The workflow command runs the config, writes request JSONL, summarizes to CSV,
+generates a Markdown report, writes strategy-advisor outputs, and builds a
+reproducible result package.
+
+You can also run the same steps manually:
 
 ```bash
 kvoptbench generate-workload --profile shared_prefix --out workloads/generated/shared_prefix_32k.jsonl
@@ -127,6 +150,39 @@ kvoptbench result-package \
 ```
 
 Generated workloads, raw results, summaries, reports, and result packages are ignored by git by default.
+
+## Artifact Contracts
+
+KVOptBench commits JSON Schema snapshots for request results, telemetry summaries,
+strategy-advisor output, dataset manifests, and result-package manifests under
+`schemas/v1`. Use these commands when preparing results for review or publication:
+
+```bash
+kvoptbench schema export --output-dir schemas/v1 --check
+kvoptbench validate-results --input results/raw
+kvoptbench validate-package --path results/packages/golden
+kvoptbench release-check
+```
+
+## Benchmark Methodology
+
+KVOptBench labels weak evidence instead of overstating it. Repeated-run summaries
+and comparison CSVs include sample counts, p50/p95, 95% confidence intervals,
+effect sizes where applicable, `methodology_status`, and caveats. Warmup rows can
+be excluded before aggregation, optional IQR outlier filtering is available through
+the statistics helpers, and `strategy-run --block-randomization` randomizes each
+repeat block without mixing repeats together.
+
+Advisor workload thresholds are YAML-tunable. Start from
+`kvoptbench/strategy/default_advisor_thresholds.yaml`, edit sample minimums,
+required metrics, or evaluator coverage, then run:
+
+```bash
+kvoptbench strategy-recommend \
+  --summary results/summary.csv \
+  --advisor-config path/to/advisor_thresholds.yaml \
+  --json-output results/strategy_advisor.json
+```
 
 ## Bring Your Own Endpoint
 
@@ -188,6 +244,25 @@ Supported telemetry sources:
 - live `nvidia-smi` GPU memory sampling.
 - LMCache Prometheus metrics or structured JSON/JSONL exports.
 
+Named telemetry profiles provide reproducible defaults for common setups:
+
+```bash
+kvoptbench telemetry-profile list
+kvoptbench telemetry-profile show --profile vllm_live
+```
+
+Use a profile in experiment YAML, then override URLs or intervals for your environment:
+
+```yaml
+telemetry:
+  profile: vllm_live
+  prometheus:
+    - name: vllm
+      url: http://127.0.0.1:8000/metrics
+  gpu:
+    sample_interval_seconds: 0.5
+```
+
 Request JSONL rows keep lightweight references to these artifacts and copy
 available run-level fields such as `gpu_memory_peak_gb` and cache hit rate into
 the normal metric/provenance flow. Unavailable telemetry remains null and is
@@ -207,6 +282,18 @@ separate channels in the JSONL results.
 - Tool-call workloads can pass OpenAI-compatible `tools` and `tool_choice` through workload metadata.
   KVOptBench validates tool name and arguments; it does not execute external tools.
 
+### Quality Evaluators
+
+KVOptBench records task quality fields next to latency and cache metrics. Current
+local evaluators include:
+
+- `qasper_answer` and `longbench_answer` for exact/contains/token-F1 answer scoring.
+- `rag_source_match` for answer plus expected source/document ID coverage.
+- `bfcl_tool_call` for function name, argument JSON, and required argument fields.
+- `json_validity` and `json_schema` for structured output checks.
+- `needle`, `exact_match`, and `contains_expected` for deterministic known-answer tasks.
+- `llm_judge_placeholder`, which remains local-only and does not call an external judge.
+
 ## Strategy Experiments
 
 The CLI can generate config plans and comparison CSVs for common inference-strategy tests:
@@ -221,6 +308,21 @@ The CLI can generate config plans and comparison CSVs for common inference-strat
 - `disagg-plan`, `disagg-run`, `disagg-compare`
 - `strategy-recommend`
 - `result-package`
+
+External benchmark imports preserve source metadata and metric provenance. Inspect
+the mapping registry before importing third-party outputs:
+
+```bash
+kvoptbench import-mappings --tool genai-perf --granularity request
+kvoptbench import \
+  --tool genai-perf \
+  --source path/to/genai_perf.json \
+  --output results/raw/imported_genai_perf.jsonl \
+  --experiment-id imported-genai-perf \
+  --workload sharegpt \
+  --manifest-output results/imports/genai_perf_manifest.json \
+  --fail-on-missing-required
+```
 
 Command previews document how a compatible server may be started. They do not launch servers:
 

@@ -78,6 +78,42 @@ def test_report_generator_creates_required_sections(tmp_path: Path) -> None:
     assert "Milestone" not in report
 
 
+def test_report_generator_includes_methodology_caveats(tmp_path: Path) -> None:
+    summary = tmp_path / "summary.csv"
+    output = tmp_path / "report.md"
+    pd.DataFrame(
+        [
+            {
+                "experiment_id": "weak_run",
+                "provider": "mock",
+                "engine": "mock",
+                "model_id": "mock-model",
+                "strategy": "baseline",
+                "workload": "shared_prefix",
+                "concurrency": 1,
+                "requests": 1,
+                "successes": 1,
+                "success_rate": 1.0,
+                "ttft_ms_count": 1,
+                "ttft_ms_stats_status": "insufficient_repetitions",
+                "e2e_latency_ms_count": 1,
+                "e2e_latency_ms_stats_status": "insufficient_repetitions",
+                "methodology_status": "exploratory",
+                "methodology_caveats": (
+                    "insufficient samples: baseline n=1, candidate n=1, minimum=2"
+                ),
+            }
+        ]
+    ).to_csv(summary, index=False)
+
+    generate_report(input_path=summary, output_path=output)
+
+    report = output.read_text(encoding="utf-8")
+    assert "## Methodology Caveats" in report
+    assert "Treat exploratory rows as directional only" in report
+    assert "insufficient samples" in report
+
+
 def test_report_generator_includes_reasoning_and_tool_call_summary(tmp_path: Path) -> None:
     summary = tmp_path / "summary.csv"
     output = tmp_path / "report.md"

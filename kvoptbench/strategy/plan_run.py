@@ -148,6 +148,7 @@ def run_strategy_plan(
     repeat_count: int | None = None,
     randomization_seed: int | None = None,
     randomize: bool = False,
+    block_randomization: bool = False,
     dry_run: bool = False,
     runner: Callable[[Path], Awaitable[Path]] = run_experiment,
 ) -> StrategyRunResult:
@@ -159,7 +160,13 @@ def run_strategy_plan(
     seed = randomization_seed if randomization_seed is not None else int(
         manifest.get("randomization_seed") or 0
     )
-    schedule = build_schedule(config_paths, repeat_count=repeats, seed=seed, randomize=randomize)
+    schedule = build_schedule(
+        config_paths,
+        repeat_count=repeats,
+        seed=seed,
+        randomize=randomize,
+        block_randomization=block_randomization,
+    )
     run_manifest_path = Path(output_run_manifest) if output_run_manifest else (
         manifest_path.parent / "run_manifest.json"
     )
@@ -177,6 +184,7 @@ def run_strategy_plan(
         "repeat_count": repeats,
         "randomization_seed": seed,
         "randomized_order": randomize,
+        "block_randomization": block_randomization,
         "schedule_id": schedule[0].schedule_id if schedule else None,
         "planned_runs": [
             {

@@ -53,6 +53,24 @@ def test_build_schedule_randomized_order_is_reproducible_by_seed() -> None:
     assert {run.schedule_id for run in first} != {run.schedule_id for run in different_seed}
 
 
+def test_build_schedule_supports_randomized_blocks_by_repeat() -> None:
+    paths = [Path("configs/a.yaml"), Path("configs/b.yaml"), Path("configs/c.yaml")]
+
+    schedule = build_schedule(
+        paths,
+        repeat_count=3,
+        seed=11,
+        randomize=True,
+        block_randomization=True,
+    )
+
+    assert [run.repeat_index for run in schedule[:3]] == [0, 0, 0]
+    assert [run.repeat_index for run in schedule[3:6]] == [1, 1, 1]
+    assert [run.repeat_index for run in schedule[6:]] == [2, 2, 2]
+    assert all(run.metadata["block_randomization"] is True for run in schedule)
+    assert [run.config_path for run in schedule[:3]] != paths
+
+
 def test_run_schedule_delegates_in_scheduled_order() -> None:
     calls: list[Path] = []
     paths = [Path("configs/a.yaml"), Path("configs/b.yaml")]

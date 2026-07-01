@@ -37,6 +37,29 @@ def test_engine_command_cli_prints_preview_without_launching() -> None:
     assert "does not launch" in result.stdout
 
 
+def test_telemetry_profile_cli_lists_and_exports_profiles() -> None:
+    runner = CliRunner()
+
+    list_result = runner.invoke(app, ["telemetry-profile", "list"])
+
+    assert list_result.exit_code == 0
+    assert "vllm_live" in list_result.stdout
+    assert "gpu_only" in list_result.stdout
+
+    show_result = runner.invoke(
+        app,
+        ["telemetry-profile", "show", "--profile", "vllm_live", "--json"],
+    )
+
+    assert show_result.exit_code == 0
+    payload = json.loads(show_result.stdout)
+    assert payload["name"] == "vllm_live"
+    assert payload["telemetry"]["prometheus"][0]["name"] == "vllm"
+    assert "engine_reported_cache_hit_rate" in payload["telemetry"]["prometheus"][0][
+        "expected_metrics"
+    ]
+
+
 def test_cache_plan_cli_writes_yaml_configs(tmp_path) -> None:
     runner = CliRunner()
 
@@ -190,6 +213,115 @@ def test_import_cli_writes_request_jsonl_for_genai_perf(tmp_path) -> None:
     assert row["task_id"] == "request-1"
     assert row["metric_provenance"]["ttft_ms"]["source_type"] == "imported"
     assert json.loads(manifest.read_text(encoding="utf-8"))["source"]["file_name"] == source.name
+
+
+def test_import_cli_fail_on_missing_required_ignores_optional_vllm_metrics(tmp_path) -> None:
+    runner = CliRunner()
+    source = tmp_path / "vllm.jsonl"
+    output = tmp_path / "imported.jsonl"
+    manifest = tmp_path / "manifest.json"
+    source.write_text(
+        json.dumps(
+            {
+                "request_id": "req-1",
+                "model": "example/model",
+                "num_input_tokens": 128,
+                "num_output_tokens": 32,
+                "ttft_ms": 120,
+                "tpot_ms": 8,
+                "latency_ms": 420,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "import",
+            "--tool",
+            "vllm-bench",
+            "--source",
+            str(source),
+            "--output",
+            str(output),
+            "--experiment-id",
+            "vllm-import",
+            "--workload",
+            "sharegpt",
+            "--manifest-output",
+            str(manifest),
+            "--fail-on-missing-required",
+        ],
+    )
+
+    assert result.exit_code == 0
+    manifest_payload = json.loads(manifest.read_text(encoding="utf-8"))
+    assert manifest_payload["mapping_registry_version"] == "1"
+    assert manifest_payload["source"]["sha256"]
+    assert manifest_payload["required_metrics"]["request"] == [
+        "input_tokens",
+        "output_tokens",
+    ]
+    assert manifest_payload["missing_required_metrics"] == []
+    assert "gpu_memory_peak_gb" in manifest_payload["missing_metrics"]
+
+
+def test_import_cli_fail_on_missing_required_rejects_missing_tokens(tmp_path) -> None:
+    runner = CliRunner()
+    source = tmp_path / "vllm_missing.jsonl"
+    output = tmp_path / "imported.jsonl"
+    source.write_text(
+        json.dumps(
+            {
+                "request_id": "req-1",
+                "model": "example/model",
+                "num_input_tokens": 128,
+                "ttft_ms": 120,
+                "latency_ms": 420,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "import",
+            "--tool",
+            "vllm-bench",
+            "--source",
+            str(source),
+            "--output",
+            str(output),
+            "--experiment-id",
+            "vllm-import",
+            "--workload",
+            "sharegpt",
+            "--fail-on-missing-required",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Missing required imported metrics: output_tokens" in result.stdout
+
+
+def test_import_mappings_cli_outputs_registry_metadata() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        ["import-mappings", "--tool", "genai-perf", "--granularity", "request", "--json"],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["mapping_registry_version"] == "1"
+    assert payload["tool"] == "genai_perf"
+    assert payload["required_metrics"] == ["input_tokens", "output_tokens"]
+    assert any(mapping["normalized_field"] == "ttft_ms" for mapping in payload["mappings"])
 
 
 def test_import_cli_writes_aggregate_csv_for_aiperf(tmp_path) -> None:

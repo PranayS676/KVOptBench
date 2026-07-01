@@ -170,6 +170,55 @@ def test_load_config_supports_live_telemetry_config(tmp_path: Path) -> None:
     assert config.telemetry.lmcache[0].expected_metrics == ["lmcache_cache_hit_rate"]
 
 
+def test_load_config_expands_named_telemetry_profile_with_overrides(tmp_path: Path) -> None:
+    config_path = _write_config(
+        tmp_path / "telemetry_profile.yaml",
+        "\n".join(
+            [
+                "telemetry:",
+                "  profile: vllm_live",
+                "  output_dir: results/custom-telemetry",
+                "  prometheus:",
+                "    - name: vllm",
+                "      url: http://metrics.example.test/metrics",
+                "  gpu:",
+                "    sample_interval_seconds: 0.25",
+            ]
+        ),
+    )
+
+    config = load_config(config_path)
+
+    assert config.telemetry is not None
+    assert config.telemetry.profile == "vllm_live"
+    assert config.telemetry.enabled is True
+    assert config.telemetry.output_dir == Path("results/custom-telemetry")
+    assert config.telemetry.prometheus[0].name == "vllm"
+    assert config.telemetry.prometheus[0].url == "http://metrics.example.test/metrics"
+    assert config.telemetry.prometheus[0].expected_metrics == [
+        "engine_reported_cache_hit_rate",
+        "vllm:num_requests_running",
+        "vllm:num_requests_waiting",
+    ]
+    assert config.telemetry.gpu is not None
+    assert config.telemetry.gpu.sample_interval_seconds == 0.25
+
+
+def test_load_config_rejects_unknown_telemetry_profile(tmp_path: Path) -> None:
+    config_path = _write_config(
+        tmp_path / "bad_telemetry_profile.yaml",
+        "\n".join(
+            [
+                "telemetry:",
+                "  profile: not-a-profile",
+            ]
+        ),
+    )
+
+    with pytest.raises(ConfigError, match="Unknown telemetry profile"):
+        load_config(config_path)
+
+
 def test_load_config_rejects_lmcache_json_source_without_path(tmp_path: Path) -> None:
     config_path = _write_config(
         tmp_path / "bad_lmcache.yaml",

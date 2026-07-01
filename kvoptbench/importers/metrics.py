@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
 
@@ -207,7 +207,51 @@ def first_mapping(
 
 def expected_metric_fields(external_tool: str, granularity: Granularity) -> list[str]:
     """Metric fields that should be explicit when missing for a tool/mode."""
-    return list(EXPECTED_METRICS[(external_tool, granularity)])
+    return list(EXPECTED_METRICS.get((external_tool, granularity), ()))
+
+
+def required_metric_fields(external_tool: str, granularity: Granularity) -> list[str]:
+    """Metric fields that make an import unusable when missing."""
+    required: list[str] = []
+    for mapping in mappings_for(external_tool, granularity):
+        if not mapping.required or mapping.normalized_field in required:
+            continue
+        required.append(mapping.normalized_field)
+    return required
+
+
+def mapping_registry_payload(
+    *,
+    external_tool: str | None = None,
+    granularity: Granularity = "any",
+) -> dict[str, Any]:
+    """Return the public mapping registry metadata used by import adapters."""
+    mappings = [
+        asdict(mapping)
+        for mapping in METRIC_MAPPINGS
+        if (external_tool is None or mapping.external_tool == external_tool)
+        and (
+            granularity == "any"
+            or mapping.granularity == "any"
+            or mapping.granularity == granularity
+        )
+    ]
+    return {
+        "mapping_registry_version": MAPPING_REGISTRY_VERSION,
+        "tool": external_tool,
+        "granularity": granularity,
+        "expected_metrics": (
+            expected_metric_fields(external_tool, granularity)
+            if external_tool is not None and granularity != "any"
+            else []
+        ),
+        "required_metrics": (
+            required_metric_fields(external_tool, granularity)
+            if external_tool is not None and granularity != "any"
+            else []
+        ),
+        "mappings": mappings,
+    }
 
 
 def metric_aliases(external_tool: str, normalized_field: str, granularity: Granularity) -> list[str]:
