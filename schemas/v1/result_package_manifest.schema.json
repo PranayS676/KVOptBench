@@ -1,0 +1,159 @@
+{
+  "$defs": {
+    "MissingMetricEntry": {
+      "description": "One unavailable metric documented for a packaged run.",
+      "properties": {
+        "metric": {
+          "title": "Metric",
+          "type": "string"
+        },
+        "reason": {
+          "default": "Metric was reported unavailable by the input artifacts; KVOptBench stores nulls instead of fabricating unavailable engine telemetry.",
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "metric"
+      ],
+      "title": "MissingMetricEntry",
+      "type": "object"
+    },
+    "PackageArtifact": {
+      "description": "One file copied or generated inside a result package.",
+      "properties": {
+        "original_name": {
+          "title": "Original Name",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "title": "Size Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "role",
+        "path",
+        "sha256",
+        "size_bytes",
+        "original_name"
+      ],
+      "title": "PackageArtifact",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Top-level manifest for a publishable result package.",
+  "properties": {
+    "artifact_count": {
+      "title": "Artifact Count",
+      "type": "integer"
+    },
+    "artifacts": {
+      "items": {
+        "$ref": "#/$defs/PackageArtifact"
+      },
+      "title": "Artifacts",
+      "type": "array"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "dataset_provenance": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Dataset Provenance",
+      "type": "array"
+    },
+    "kvoptbench_version": {
+      "default": "0.1.0",
+      "title": "Kvoptbench Version",
+      "type": "string"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Limitations",
+      "type": "array"
+    },
+    "metric_provenance": {
+      "additionalProperties": true,
+      "title": "Metric Provenance",
+      "type": "object"
+    },
+    "missing_metrics": {
+      "items": {
+        "$ref": "#/$defs/MissingMetricEntry"
+      },
+      "title": "Missing Metrics",
+      "type": "array"
+    },
+    "package_version": {
+      "default": "1",
+      "title": "Package Version",
+      "type": "string"
+    },
+    "reproduction_notes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Reproduction Notes",
+      "type": "array"
+    },
+    "run_name": {
+      "title": "Run Name",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "summary": {
+      "additionalProperties": true,
+      "title": "Summary",
+      "type": "object"
+    },
+    "workload_provenance": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Workload Provenance",
+      "type": "array"
+    }
+  },
+  "required": [
+    "run_name",
+    "artifact_count",
+    "summary",
+    "artifacts",
+    "workload_provenance",
+    "dataset_provenance",
+    "missing_metrics",
+    "metric_provenance",
+    "limitations",
+    "reproduction_notes"
+  ],
+  "title": "ResultPackageManifest",
+  "type": "object",
+  "x-kvoptbench-contract": "result_package_manifest",
+  "x-kvoptbench-schema-version": "1"
+}

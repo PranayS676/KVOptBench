@@ -84,6 +84,7 @@ class StrategyRecommendation(BaseModel):
 class StrategyAdvisorReport(BaseModel):
     """Full strategy advisor report."""
 
+    schema_version: str = "1"
     generated_at: str = Field(default_factory=utc_now_iso)
     overall_recommendation: str
     recommendations: list[StrategyRecommendation]

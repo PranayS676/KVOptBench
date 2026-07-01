@@ -15,8 +15,10 @@ from kvoptbench.config import ConfigError, validate_config
 app = typer.Typer(help="KVOptBench cache-aware LLM inference benchmark.")
 dataset_app = typer.Typer(help="Prepare public dataset workloads.")
 workflow_app = typer.Typer(help="Run end-to-end benchmark workflows.")
+schema_app = typer.Typer(help="Export and check artifact contract schemas.")
 app.add_typer(dataset_app, name="dataset")
 app.add_typer(workflow_app, name="workflow")
+app.add_typer(schema_app, name="schema")
 
 
 @app.command("validate-config")
@@ -105,6 +107,62 @@ def doctor_command(
             print(f"[{color}]{check.status.upper()}[/{color}] {check.name}: {check.message}")
     if not report.ok:
         raise typer.Exit(code=1)
+
+
+@app.command("validate-results")
+def validate_results_command(
+    input: Path = typer.Option(..., "--input", "-i", help="Result JSONL file or directory."),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+) -> None:
+    """Validate request-level JSONL result rows against the stable contract."""
+    from kvoptbench.contracts import validate_result_rows
+
+    report = validate_result_rows(input)
+    if json_output:
+        typer.echo(json.dumps(report.model_dump(mode="json"), indent=2))
+    else:
+        _print_validation_report(report.model_dump(mode="json"))
+    if not report.ok:
+        raise typer.Exit(code=1)
+
+
+@app.command("validate-package")
+def validate_package_command(
+    path: Path = typer.Option(..., "--path", help="Result package directory."),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+) -> None:
+    """Validate a result package manifest and package-relative artifact hashes."""
+    from kvoptbench.contracts import validate_result_package
+
+    report = validate_result_package(path)
+    if json_output:
+        typer.echo(json.dumps(report.model_dump(mode="json"), indent=2))
+    else:
+        _print_validation_report(report.model_dump(mode="json"))
+    if not report.ok:
+        raise typer.Exit(code=1)
+
+
+@schema_app.command("export")
+def schema_export_command(
+    output_dir: Path = typer.Option(..., "--output-dir", help="Directory for schema files."),
+    check: bool = typer.Option(False, "--check", help="Fail if committed schemas are stale."),
+) -> None:
+    """Export JSON Schema files for stable KVOptBench artifacts."""
+    from kvoptbench.contracts import check_schema_files, write_schema_files
+
+    if check:
+        mismatches = check_schema_files(output_dir)
+        if mismatches:
+            for mismatch in mismatches:
+                print(f"[red]FAILED[/red] {mismatch}")
+            raise typer.Exit(code=1)
+        print("[green]Schema snapshots are current[/green]")
+        return
+
+    written = write_schema_files(output_dir)
+    for name, path in written.items():
+        print(f"[green]Wrote schema[/green] {name}: {path}")
 
 
 @workflow_app.command("run")
@@ -1047,6 +1105,20 @@ def _parse_context_buckets(raw: str | None) -> tuple[int, ...] | None:
     if raw is None or not raw.strip():
         return None
     return tuple(int(value.strip()) for value in raw.split(",") if value.strip())
+
+
+def _print_validation_report(report: dict[str, Any]) -> None:
+    status = "OK" if report.get("ok") else "FAILED"
+    color = "green" if report.get("ok") else "red"
+    print(
+        f"[{color}]{status}[/{color}] {report.get('artifact_type')} "
+        f"checked_files={report.get('checked_files')} rows={report.get('row_count')}"
+    )
+    for error in report.get("errors", []):
+        location = error.get("file", "<unknown>")
+        if error.get("line") is not None:
+            location = f"{location}:{error['line']}"
+        print(f"[red]- {location}: {error.get('message')}[/red]")
 
 
 def _parse_csv_strings(raw: str | None) -> tuple[str, ...]:

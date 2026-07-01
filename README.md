@@ -126,6 +126,8 @@ kvoptbench workflow run \
   --output-dir results/golden \
   --package-dir results/packages/golden \
   --run-name golden-qasper-mock
+kvoptbench validate-results --input .kvoptbench-starter/results/raw
+kvoptbench validate-package --path results/packages/golden
 ```
 
 The workflow command runs the config, writes request JSONL, summarizes to CSV,
@@ -148,6 +150,18 @@ kvoptbench result-package \
 ```
 
 Generated workloads, raw results, summaries, reports, and result packages are ignored by git by default.
+
+## Artifact Contracts
+
+KVOptBench commits JSON Schema snapshots for request results, telemetry summaries,
+strategy-advisor output, dataset manifests, and result-package manifests under
+`schemas/v1`. Use these commands when preparing results for review or publication:
+
+```bash
+kvoptbench schema export --output-dir schemas/v1 --check
+kvoptbench validate-results --input results/raw
+kvoptbench validate-package --path results/packages/golden
+```
 
 ## Bring Your Own Endpoint
 

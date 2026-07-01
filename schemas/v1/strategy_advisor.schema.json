@@ -1,0 +1,350 @@
+{
+  "$defs": {
+    "EvidenceItem": {
+      "description": "One observed metric or result label used by a recommendation.",
+      "properties": {
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "metric": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metric"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "title": "EvidenceItem",
+      "type": "object"
+    },
+    "NextExperimentPlan": {
+      "description": "Concrete command template and unresolved bindings for a follow-up experiment.",
+      "properties": {
+        "command": {
+          "title": "Command",
+          "type": "string"
+        },
+        "needed": {
+          "default": true,
+          "title": "Needed",
+          "type": "boolean"
+        },
+        "objective": {
+          "title": "Objective",
+          "type": "string"
+        },
+        "options": {
+          "additionalProperties": true,
+          "title": "Options",
+          "type": "object"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "required_bindings": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Required Bindings",
+          "type": "object"
+        }
+      },
+      "required": [
+        "reason",
+        "objective",
+        "command"
+      ],
+      "title": "NextExperimentPlan",
+      "type": "object"
+    },
+    "StrategyRecommendation": {
+      "description": "Advisor output for one strategy.",
+      "properties": {
+        "caveats": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Caveats",
+          "type": "array"
+        },
+        "confidence": {
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "confidence_reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Confidence Reasons",
+          "type": "array"
+        },
+        "confidence_score": {
+          "default": 0.0,
+          "title": "Confidence Score",
+          "type": "number"
+        },
+        "decision": {
+          "enum": [
+            "recommend",
+            "consider",
+            "do_not_recommend",
+            "inconclusive",
+            "needs_more_data"
+          ],
+          "title": "Decision",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/EvidenceItem"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "missing_recommended_metrics": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Recommended Metrics",
+          "type": "array"
+        },
+        "missing_required_metrics": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Required Metrics",
+          "type": "array"
+        },
+        "next_experiment_plans": {
+          "items": {
+            "$ref": "#/$defs/NextExperimentPlan"
+          },
+          "title": "Next Experiment Plans",
+          "type": "array"
+        },
+        "next_experiment_priority": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Next Experiment Priority",
+          "type": "array"
+        },
+        "next_experiments": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Next Experiments",
+          "type": "array"
+        },
+        "quality_gate_status": {
+          "anyOf": [
+            {
+              "enum": [
+                "pass",
+                "warn",
+                "fail",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quality Gate Status"
+        },
+        "quality_guardrail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quality Guardrail"
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rank"
+        },
+        "score": {
+          "default": 0.0,
+          "title": "Score",
+          "type": "number"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "strategy": {
+          "title": "Strategy",
+          "type": "string"
+        },
+        "workload_profile": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Workload Profile"
+        },
+        "workload_threshold": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkloadThreshold"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "strategy",
+        "decision",
+        "confidence",
+        "source"
+      ],
+      "title": "StrategyRecommendation",
+      "type": "object"
+    },
+    "WorkloadThreshold": {
+      "description": "Deterministic threshold policy for one workload profile.",
+      "properties": {
+        "blocking_quality_regression": {
+          "default": true,
+          "title": "Blocking Quality Regression",
+          "type": "boolean"
+        },
+        "minimum_repeated_trials": {
+          "title": "Minimum Repeated Trials",
+          "type": "integer"
+        },
+        "minimum_samples": {
+          "title": "Minimum Samples",
+          "type": "integer"
+        },
+        "primary_focus": {
+          "title": "Primary Focus",
+          "type": "string"
+        },
+        "recommended_metrics": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Recommended Metrics",
+          "type": "array"
+        },
+        "required_metrics": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required Metrics",
+          "type": "array"
+        },
+        "required_quality_evaluators": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required Quality Evaluators",
+          "type": "array"
+        },
+        "threshold_posture": {
+          "title": "Threshold Posture",
+          "type": "string"
+        },
+        "workload_profile": {
+          "title": "Workload Profile",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workload_profile",
+        "primary_focus",
+        "minimum_samples",
+        "minimum_repeated_trials",
+        "threshold_posture"
+      ],
+      "title": "WorkloadThreshold",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Full strategy advisor report.",
+  "properties": {
+    "generated_at": {
+      "title": "Generated At",
+      "type": "string"
+    },
+    "overall_recommendation": {
+      "title": "Overall Recommendation",
+      "type": "string"
+    },
+    "recommendations": {
+      "items": {
+        "$ref": "#/$defs/StrategyRecommendation"
+      },
+      "title": "Recommendations",
+      "type": "array"
+    },
+    "schema_version": {
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "overall_recommendation",
+    "recommendations"
+  ],
+  "title": "StrategyAdvisorReport",
+  "type": "object",
+  "x-kvoptbench-contract": "strategy_advisor",
+  "x-kvoptbench-schema-version": "1"
+}
