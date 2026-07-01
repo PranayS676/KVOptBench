@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -195,6 +196,7 @@ def generate_report(
     _append_speculative_decoding(lines, spec_decoding_frame)
     _append_disaggregation(lines, disagg_frame)
     _append_strategy_advisor(lines, strategy_report)
+    _append_metric_provenance(lines, frame)
 
     lines.extend(["", "## Cache Interpretation", ""])
     if "cache_interpretation" in frame.columns:
@@ -753,6 +755,71 @@ def _append_strategy_advisor(lines: list[str], strategy_report) -> None:
             lines.append("  Caveats: " + " ".join(item.caveats))
         if item.next_experiments:
             lines.append("  Next experiments: " + " ".join(item.next_experiments))
+
+
+def _append_metric_provenance(lines: list[str], frame: pd.DataFrame) -> None:
+    lines.extend(["", "## Metric Provenance", ""])
+    provenance = _metric_provenance_rows(frame)
+    if not provenance:
+        lines.append("No metric provenance summary was available.")
+        return
+
+    lines.extend(
+        [
+            "| metric | source types | unavailable reasons |",
+            "|---|---|---|",
+        ]
+    )
+    for metric, details in sorted(provenance.items()):
+        source_types = ", ".join(f"`{value}`" for value in details["source_types"]) or "n/a"
+        unavailable = "; ".join(details["unavailable_reasons"]) or "n/a"
+        lines.append(f"| `{metric}` | {source_types} | {unavailable} |")
+
+
+def _metric_provenance_rows(frame: pd.DataFrame) -> dict[str, dict[str, set[str]]]:
+    rows: dict[str, dict[str, set[str]]] = {}
+    if "metric_provenance" in frame:
+        for value in frame["metric_provenance"].dropna():
+            try:
+                parsed = json.loads(str(value))
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            for metric, details in parsed.items():
+                if not isinstance(details, dict):
+                    continue
+                entry = rows.setdefault(
+                    str(metric), {"source_types": set(), "unavailable_reasons": set()}
+                )
+                for source_type in details.get("source_types") or []:
+                    entry["source_types"].add(str(source_type))
+                for reason in details.get("unavailable_reasons") or []:
+                    entry["unavailable_reasons"].add(str(reason))
+
+    if rows:
+        return rows
+
+    for value in frame.get("metric_source_types", pd.Series(dtype=str)).fillna(""):
+        for piece in str(value).split(";"):
+            if ":" not in piece:
+                continue
+            metric, source_types = piece.split(":", 1)
+            entry = rows.setdefault(metric, {"source_types": set(), "unavailable_reasons": set()})
+            for source_type in source_types.split(","):
+                if source_type.strip():
+                    entry["source_types"].add(source_type.strip())
+
+    for value in frame.get("unavailable_metric_reasons", pd.Series(dtype=str)).fillna(""):
+        for piece in str(value).split(";"):
+            if ":" not in piece:
+                continue
+            metric, reasons = piece.split(":", 1)
+            entry = rows.setdefault(metric, {"source_types": set(), "unavailable_reasons": set()})
+            for reason in reasons.split(" | "):
+                if reason.strip():
+                    entry["unavailable_reasons"].add(reason.strip())
+    return rows
 
 
 def main() -> None:

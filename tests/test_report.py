@@ -30,6 +30,13 @@ def test_report_generator_creates_required_sections(tmp_path: Path) -> None:
                 "cache_miss_penalty_ms_mean": 250.0,
                 "cache_interpretation": "credible_cache_reuse_signal",
                 "missing_metrics": "gpu_memory_used_gb;gpu_memory_peak_gb",
+                "metric_provenance": (
+                    '{"gpu_memory_peak_gb":{"source_types":["gpu_reported"],'
+                    '"measurement_methods":["GPU telemetry adapter"],'
+                    '"unavailable_reasons":["GPU telemetry was not collected for this run."]},'
+                    '"ttft_ms":{"source_types":["client_observed"],'
+                    '"measurement_methods":["stream timing"],"unavailable_reasons":[]}}'
+                ),
             }
         ]
     ).to_csv(summary, index=False)
@@ -46,6 +53,10 @@ def test_report_generator_creates_required_sections(tmp_path: Path) -> None:
     assert "## Quality Summary" in report
     assert "## Cache Summary" in report
     assert "cache miss penalty ms" in report
+    assert "## Metric Provenance" in report
+    assert "`ttft_ms`" in report
+    assert "`client_observed`" in report
+    assert "GPU telemetry was not collected" in report
     assert "## Cache Interpretation" in report
     assert "credible_cache_reuse_signal" in report
     assert "## Missing Metrics Warning" in report

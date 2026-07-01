@@ -93,11 +93,66 @@ def summarize_results(input_path: str | Path, output_path: str | Path) -> Path:
             elif isinstance(value, str) and value:
                 missing.update(value.split(";"))
         summary["missing_metrics"] = ";".join(sorted(missing))
+        metric_provenance = _collect_metric_provenance(group)
+        summary["metric_provenance"] = json.dumps(metric_provenance, sort_keys=True)
+        summary["metric_source_types"] = _render_metric_sources(metric_provenance)
+        summary["unavailable_metric_reasons"] = _render_unavailable_reasons(
+            metric_provenance
+        )
         summaries.append(summary)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(summaries).to_csv(output_path, index=False)
     return output_path
+
+
+def _collect_metric_provenance(group: pd.DataFrame) -> dict[str, dict[str, list[str]]]:
+    collected: dict[str, dict[str, set[str]]] = {}
+    for value in group.get("metric_provenance", []):
+        if not isinstance(value, dict):
+            continue
+        for metric, details in value.items():
+            if not isinstance(details, dict):
+                continue
+            entry = collected.setdefault(
+                str(metric),
+                {
+                    "source_types": set(),
+                    "measurement_methods": set(),
+                    "unavailable_reasons": set(),
+                },
+            )
+            if details.get("source_type"):
+                entry["source_types"].add(str(details["source_type"]))
+            if details.get("measurement_method"):
+                entry["measurement_methods"].add(str(details["measurement_method"]))
+            if details.get("available") is False and details.get("missing_reason"):
+                entry["unavailable_reasons"].add(str(details["missing_reason"]))
+
+    return {
+        metric: {
+            "source_types": sorted(values["source_types"]),
+            "measurement_methods": sorted(values["measurement_methods"]),
+            "unavailable_reasons": sorted(values["unavailable_reasons"]),
+        }
+        for metric, values in sorted(collected.items())
+    }
+
+
+def _render_metric_sources(metric_provenance: dict[str, dict[str, list[str]]]) -> str:
+    return ";".join(
+        f"{metric}:{','.join(details['source_types'])}"
+        for metric, details in metric_provenance.items()
+        if details.get("source_types")
+    )
+
+
+def _render_unavailable_reasons(metric_provenance: dict[str, dict[str, list[str]]]) -> str:
+    return ";".join(
+        f"{metric}:{' | '.join(details['unavailable_reasons'])}"
+        for metric, details in metric_provenance.items()
+        if details.get("unavailable_reasons")
+    )
 
 
 def main() -> None:

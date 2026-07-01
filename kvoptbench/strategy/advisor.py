@@ -19,6 +19,8 @@ MEANINGFUL_CACHE_GAIN_MS = 25.0
 MEANINGFUL_THROUGHPUT_DELTA_PCT = 5.0
 MEANINGFUL_LATENCY_DELTA_PCT = -5.0
 MEANINGFUL_MEMORY_DELTA_PCT = -5.0
+QUALITY_REGRESSION_THRESHOLD = -0.05
+TINY_SAMPLE_SUPPORT = 4
 
 
 class EvidenceItem(BaseModel):
@@ -35,11 +37,15 @@ class StrategyRecommendation(BaseModel):
     strategy: str
     decision: Decision
     confidence: Confidence
+    confidence_score: float = 0.0
+    confidence_reasons: list[str] = Field(default_factory=list)
     rank: int | None = None
     score: float = 0.0
     evidence: list[EvidenceItem] = Field(default_factory=list)
     caveats: list[str] = Field(default_factory=list)
     next_experiments: list[str] = Field(default_factory=list)
+    next_experiment_priority: list[str] = Field(default_factory=list)
+    quality_guardrail: str | None = None
     source: str
 
 
@@ -101,13 +107,40 @@ def build_strategy_advisor_report(
     }
 
     recommendations = [
-        evaluate_prefix_caching(frames["cache"], frames["prefix_sweep"]),
-        evaluate_kv_quantization(frames["kv_quant"]),
-        evaluate_kv_offload(frames["kv_offload"]),
-        evaluate_speculative_decoding(frames["spec_decoding"]),
-        evaluate_disaggregation(frames["disagg"]),
+        _apply_confidence_model(
+            evaluate_prefix_caching(frames["cache"], frames["prefix_sweep"]),
+            evidence_frames=[frames["cache"], frames["prefix_sweep"]],
+            summary_frame=summary,
+        ),
+        _apply_confidence_model(
+            evaluate_kv_quantization(frames["kv_quant"]),
+            evidence_frames=[frames["kv_quant"]],
+            summary_frame=summary,
+        ),
+        _apply_confidence_model(
+            evaluate_kv_offload(frames["kv_offload"]),
+            evidence_frames=[frames["kv_offload"]],
+            summary_frame=summary,
+        ),
+        _apply_confidence_model(
+            evaluate_speculative_decoding(frames["spec_decoding"]),
+            evidence_frames=[frames["spec_decoding"]],
+            summary_frame=summary,
+        ),
+        _apply_confidence_model(
+            evaluate_disaggregation(frames["disagg"]),
+            evidence_frames=[frames["disagg"]],
+            summary_frame=summary,
+        ),
     ]
-    recommendations.extend(evaluate_long_context_next_steps(frames["long_context"], summary))
+    recommendations.extend(
+        _apply_confidence_model(
+            item,
+            evidence_frames=[frames["long_context"]],
+            summary_frame=summary,
+        )
+        for item in evaluate_long_context_next_steps(frames["long_context"], summary)
+    )
     ranked = _rank_recommendations(recommendations)
     return StrategyAdvisorReport(
         overall_recommendation=_overall_recommendation(ranked),
@@ -576,6 +609,279 @@ def _needs_more_data(
     )
 
 
+def _apply_confidence_model(
+    recommendation: StrategyRecommendation,
+    *,
+    evidence_frames: list[pd.DataFrame | None],
+    summary_frame: pd.DataFrame,
+) -> StrategyRecommendation:
+    """Add transparent confidence scoring without changing legacy fields."""
+    evidence_rows = _frame_rows(evidence_frames)
+    summary_rows = _frame_rows([summary_frame])
+    context_rows = [*evidence_rows, *summary_rows]
+
+    score = _base_confidence_score(recommendation)
+    reasons: list[str] = []
+    priority: list[str] = []
+
+    metric_evidence_count = sum(1 for item in recommendation.evidence if item.metric)
+    if metric_evidence_count:
+        reasons.append(
+            f"Evidence completeness: {metric_evidence_count} metric-backed evidence item(s)."
+        )
+    else:
+        reasons.append(
+            "Evidence completeness is limited: no metric-backed evidence items were available."
+        )
+        score -= 0.20
+        _append_unique(
+            priority,
+            "Add comparable latency, throughput, quality, and memory deltas before relying on this recommendation.",
+        )
+
+    missing_metrics = _collect_missing_metrics(evidence_rows)
+    if not evidence_rows:
+        missing_metrics = missing_metrics or _collect_missing_metrics(summary_rows)
+    if missing_metrics:
+        score -= min(0.08 + (0.04 * len(missing_metrics)), 0.30)
+        reasons.append(
+            "missing telemetry lowers confidence: " + ", ".join(missing_metrics) + "."
+        )
+        for next_experiment in _missing_metric_next_experiments(missing_metrics):
+            _append_unique(priority, next_experiment)
+    else:
+        reasons.append("Missing telemetry: no missing metrics were reported.")
+
+    sample_count = _sample_support_count(evidence_rows)
+    if sample_count is None:
+        sample_count = _sample_support_count(summary_rows)
+    if sample_count is None:
+        reasons.append("Sample support: no request/sample count column was available.")
+    elif sample_count < TINY_SAMPLE_SUPPORT:
+        score -= 0.25
+        reasons.append(
+            f"Tiny sample support: only {sample_count} requests/trials were reported."
+        )
+        _append_unique(
+            priority,
+            "Repeat trials until each compared condition has at least 4 requests before relying on the recommendation.",
+        )
+    else:
+        reasons.append(f"Sample support: {sample_count} requests/trials were reported.")
+
+    score = _apply_quality_guardrail(recommendation, evidence_rows, reasons, priority, score)
+
+    if _has_mock_source(context_rows):
+        score -= 0.05
+        _append_unique(
+            recommendation.caveats,
+            "mock source data validates benchmark wiring only; it is not real engine validation.",
+        )
+        reasons.append(
+            "Source type: mock source; do not treat this as real engine validation."
+        )
+        _append_unique(
+            priority,
+            "If making real-engine performance claims, repeat on a real endpoint; otherwise treat this as pipeline validation.",
+        )
+    elif _has_source_signal(context_rows):
+        reasons.append("Source type: no mock source fields were detected.")
+
+    if recommendation.strategy == "prefix_caching" and any(
+        "No prefix-overlap sweep CSV" in caveat for caveat in recommendation.caveats
+    ):
+        score -= 0.15
+        reasons.append("Prefix sweep evidence is missing, so the cache threshold is unknown.")
+        _append_unique(
+            priority,
+            "Run prefix-sweep-compare to find the minimum shared-prefix ratio that pays off.",
+        )
+
+    recommendation.confidence_score = _clamp_score(score)
+    recommendation.confidence = _confidence_from_score(recommendation.confidence_score)
+    recommendation.confidence_reasons = reasons
+    recommendation.next_experiment_priority = priority
+    return recommendation
+
+
+def _base_confidence_score(recommendation: StrategyRecommendation) -> float:
+    if recommendation.decision == "needs_more_data":
+        return 0.20
+    return {"high": 0.95, "medium": 0.70, "low": 0.40}[recommendation.confidence]
+
+
+def _frame_rows(frames: list[pd.DataFrame | None]) -> list[pd.Series]:
+    rows: list[pd.Series] = []
+    for frame in frames:
+        if _is_missing_frame(frame):
+            continue
+        rows.extend(row for _, row in frame.iterrows())
+    return rows
+
+
+def _collect_missing_metrics(rows: list[pd.Series]) -> list[str]:
+    missing: set[str] = set()
+    for row in rows:
+        missing.update(_missing_metric_names(row))
+    return sorted(missing)
+
+
+def _sample_support_count(rows: list[pd.Series]) -> int | None:
+    columns = (
+        "requests",
+        "request_count",
+        "sample_count",
+        "samples",
+        "trial_count",
+        "repetition_count",
+        "repeat_count",
+        "count",
+    )
+    counts: list[int] = []
+    for row in rows:
+        for column in columns:
+            if column not in row.index:
+                continue
+            value = _to_float(row.get(column))
+            if value is not None and value > 0:
+                counts.append(int(value))
+    if not counts:
+        return None
+    return min(counts)
+
+
+def _apply_quality_guardrail(
+    recommendation: StrategyRecommendation,
+    rows: list[pd.Series],
+    reasons: list[str],
+    priority: list[str],
+    score: float,
+) -> float:
+    if recommendation.strategy not in {
+        "kv_quantization",
+        "kv_offload",
+        "speculative_decoding",
+        "prefill_decode_disaggregation",
+    }:
+        return score
+    if not rows:
+        return score
+
+    quality_delta = _min_numeric_row_value(rows, "quality_delta")
+    if quality_delta is None:
+        recommendation.quality_guardrail = "unknown"
+        if recommendation.decision in {"recommend", "consider"}:
+            score -= 0.20
+            reasons.append(
+                "Quality guardrail is unknown because quality_delta telemetry is missing."
+            )
+            _append_unique(
+                priority,
+                "Add quality-score telemetry or task-specific evaluators before selecting this strategy.",
+            )
+        return score
+
+    if quality_delta < QUALITY_REGRESSION_THRESHOLD:
+        recommendation.quality_guardrail = "failed"
+        reasons.append(
+            "Failed quality guardrail: quality delta "
+            f"{_fmt_metric(quality_delta)} is below {_fmt_metric(QUALITY_REGRESSION_THRESHOLD)}."
+        )
+        _append_unique(
+            recommendation.caveats,
+            "Quality guardrail failed; observed quality regression is beyond the allowed threshold.",
+        )
+        _append_unique(
+            priority,
+            "Retest with quality-sensitive tasks or a safer strategy setting before considering rollout.",
+        )
+        if recommendation.decision in {"recommend", "consider"}:
+            recommendation.decision = "do_not_recommend"
+            recommendation.score = min(recommendation.score, -2.0)
+        return score
+
+    recommendation.quality_guardrail = "passed"
+    reasons.append(
+        "Quality guardrail passed: quality delta "
+        f"{_fmt_metric(quality_delta)} stayed above {_fmt_metric(QUALITY_REGRESSION_THRESHOLD)}."
+    )
+    return score
+
+
+def _min_numeric_row_value(rows: list[pd.Series], column: str) -> float | None:
+    values = [_to_float(row.get(column)) for row in rows if column in row.index]
+    numeric = [value for value in values if value is not None]
+    if not numeric:
+        return None
+    return min(numeric)
+
+
+def _missing_metric_next_experiments(missing_metrics: list[str]) -> list[str]:
+    experiments: list[str] = []
+    lower_missing = {metric.lower() for metric in missing_metrics}
+    if any("gpu_memory" in metric or "memory" in metric for metric in lower_missing):
+        experiments.append("Capture GPU memory telemetry and rerun the comparison.")
+    if "speculative_acceptance_rate" in lower_missing:
+        experiments.append(
+            "Add speculative acceptance-rate telemetry before promoting speculative decoding."
+        )
+    if any("cache_hit" in metric or "cache_miss" in metric for metric in lower_missing):
+        experiments.append(
+            "Capture cache-hit or cache-proxy telemetry for the cache comparison."
+        )
+    if any("quality" in metric for metric in lower_missing):
+        experiments.append(
+            "Add quality-score telemetry or task-specific evaluators before selecting this strategy."
+        )
+    if any(
+        metric in lower_missing
+        for metric in {"ttft_ms", "tpot_ms", "itl_ms", "e2e_latency_ms"}
+    ):
+        experiments.append(
+            "Capture TTFT, TPOT, ITL, and end-to-end latency telemetry for the comparison."
+        )
+    if not experiments:
+        experiments.append("Capture the missing telemetry and rerun the comparison.")
+    return experiments
+
+
+def _has_mock_source(rows: list[pd.Series]) -> bool:
+    source_columns = ("source_type", "provider", "endpoint_type", "engine", "model_id")
+    for row in rows:
+        for column in source_columns:
+            if column not in row:
+                continue
+            value = _clean_string(row.get(column)).lower()
+            if "mock" in value:
+                return True
+    return False
+
+
+def _has_source_signal(rows: list[pd.Series]) -> bool:
+    source_columns = ("source_type", "provider", "endpoint_type", "engine", "model_id")
+    for row in rows:
+        if any(column in row and _clean_string(row.get(column)) for column in source_columns):
+            return True
+    return False
+
+
+def _append_unique(items: list[str], value: str) -> None:
+    if value not in items:
+        items.append(value)
+
+
+def _clamp_score(value: float) -> float:
+    return round(max(0.0, min(1.0, value)), 2)
+
+
+def _confidence_from_score(score: float) -> Confidence:
+    if score >= 0.80:
+        return "high"
+    if score >= 0.50:
+        return "medium"
+    return "low"
+
+
 def _rank_recommendations(
     recommendations: list[StrategyRecommendation],
 ) -> list[StrategyRecommendation]:
@@ -732,7 +1038,10 @@ def _positive_delta_score(row: pd.Series) -> float:
 def _to_float(value) -> float | None:
     if value is None or pd.isna(value):
         return None
-    return float(value)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _clean_string(value) -> str:

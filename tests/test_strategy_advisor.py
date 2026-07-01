@@ -127,6 +127,168 @@ def test_strategy_advisor_recommends_speculative_decoding_when_decode_metrics_im
     assert any("acceptance" in caveat for caveat in recommendation.caveats)
 
 
+def test_strategy_advisor_downgrades_confidence_for_missing_required_telemetry(
+    tmp_path: Path,
+) -> None:
+    summary = _write_summary(tmp_path, provider="local", requests=12)
+    kv_quant = tmp_path / "kv_quantization.csv"
+    pd.DataFrame(
+        [
+            {
+                "provider": "local",
+                "engine": "vllm",
+                "model_id": "model",
+                "workload": "long_context_pressure",
+                "context_token_bucket": 32768,
+                "baseline_strategy": "baseline",
+                "quantized_strategy": "kv_fp8",
+                "e2e_delta_pct": -8.0,
+                "throughput_delta_pct": 12.0,
+                "quality_delta": 0.0,
+                "memory_delta_pct": None,
+                "missing_metrics": "gpu_memory_peak_gb",
+                "requests": 12,
+                "quantized_success_rate": 1.0,
+                "quantization_interpretation": "quantization_promising",
+            }
+        ]
+    ).to_csv(kv_quant, index=False)
+
+    report = build_strategy_advisor_report(summary_path=summary, kv_quant_input_path=kv_quant)
+
+    recommendation = _by_strategy(report, "kv_quantization")
+    assert recommendation.decision == "recommend"
+    assert recommendation.confidence == "medium"
+    assert recommendation.confidence_score < 0.8
+    assert any("missing telemetry" in reason for reason in recommendation.confidence_reasons)
+    assert any("GPU memory telemetry" in item for item in recommendation.next_experiment_priority)
+
+
+def test_strategy_advisor_downgrades_confidence_for_tiny_sample_support(
+    tmp_path: Path,
+) -> None:
+    summary = _write_summary(tmp_path, provider="local", requests=2)
+    kv_quant = tmp_path / "kv_quantization.csv"
+    pd.DataFrame(
+        [
+            {
+                "provider": "local",
+                "engine": "vllm",
+                "model_id": "model",
+                "workload": "long_context_pressure",
+                "context_token_bucket": 32768,
+                "baseline_strategy": "baseline",
+                "quantized_strategy": "kv_fp8",
+                "e2e_delta_pct": -8.0,
+                "throughput_delta_pct": 12.0,
+                "quality_delta": 0.0,
+                "memory_delta_pct": -20.0,
+                "missing_metrics": "",
+                "requests": 2,
+                "quantized_success_rate": 1.0,
+                "quantization_interpretation": "quantization_promising",
+            }
+        ]
+    ).to_csv(kv_quant, index=False)
+
+    report = build_strategy_advisor_report(summary_path=summary, kv_quant_input_path=kv_quant)
+
+    recommendation = _by_strategy(report, "kv_quantization")
+    assert recommendation.decision == "recommend"
+    assert recommendation.confidence == "medium"
+    assert recommendation.confidence_score < 0.8
+    assert any("sample support" in reason for reason in recommendation.confidence_reasons)
+    assert any("Repeat trials" in item for item in recommendation.next_experiment_priority)
+
+
+def test_strategy_advisor_quality_guardrail_overrides_promising_interpretation(
+    tmp_path: Path,
+) -> None:
+    summary = _write_summary(tmp_path, provider="local", requests=12)
+    speculative = tmp_path / "speculative_decoding.csv"
+    pd.DataFrame(
+        [
+            {
+                "provider": "local",
+                "engine": "vllm",
+                "model_id": "model",
+                "workload": "decode_heavy",
+                "output_token_bucket": 256,
+                "baseline_strategy": "baseline",
+                "speculative_strategy": "speculative_decoding",
+                "e2e_delta_pct": -24.0,
+                "throughput_delta_pct": 33.333,
+                "quality_delta": -0.08,
+                "speculative_success_rate": 1.0,
+                "missing_metrics": "",
+                "requests": 12,
+                "speculative_decoding_interpretation": "speculative_decoding_promising",
+            }
+        ]
+    ).to_csv(speculative, index=False)
+
+    report = build_strategy_advisor_report(
+        summary_path=summary,
+        spec_decoding_input_path=speculative,
+    )
+
+    recommendation = _by_strategy(report, "speculative_decoding")
+    assert recommendation.decision == "do_not_recommend"
+    assert recommendation.quality_guardrail == "failed"
+    assert any("quality guardrail" in reason for reason in recommendation.confidence_reasons)
+    assert any("quality-sensitive" in item for item in recommendation.next_experiment_priority)
+
+
+def test_strategy_advisor_marks_mock_source_without_real_engine_claims(tmp_path: Path) -> None:
+    summary = _write_summary(tmp_path, provider="mock", source_type="mock", requests=8)
+    cache = tmp_path / "cache_summary.csv"
+    prefix_sweep = tmp_path / "prefix_sweep.csv"
+    pd.DataFrame(
+        [
+            {
+                "provider": "mock",
+                "source_type": "mock",
+                "engine": "vllm",
+                "model_id": "model",
+                "strategy": "cache_on",
+                "shared_cold_ttft_ms": 320.0,
+                "shared_warm_ttft_ms": 110.0,
+                "random_cache_miss_penalty_ms": 15.0,
+                "control_adjusted_cache_gain_ms": 195.0,
+                "shared_prefix_tokens": 12000,
+                "interpretation": "credible_cache_reuse_signal",
+            }
+        ]
+    ).to_csv(cache, index=False)
+    pd.DataFrame(
+        [
+            {
+                "provider": "mock",
+                "source_type": "mock",
+                "engine": "vllm",
+                "model_id": "model",
+                "strategy": "cache_on",
+                "shared_prefix_ratio": 0.5,
+                "cache_gain_ms": 100.0,
+                "requests": 8,
+                "interpretation": "meaningful_prefix_cache_gain",
+                "success_rate": 1.0,
+            }
+        ]
+    ).to_csv(prefix_sweep, index=False)
+
+    report = build_strategy_advisor_report(
+        summary_path=summary,
+        cache_input_path=cache,
+        prefix_sweep_input_path=prefix_sweep,
+    )
+
+    recommendation = _by_strategy(report, "prefix_caching")
+    assert recommendation.decision == "recommend"
+    assert any("mock" in caveat and "real engine" in caveat for caveat in recommendation.caveats)
+    assert any("mock source" in reason for reason in recommendation.confidence_reasons)
+
+
 def test_strategy_advisor_rejects_disaggregation_decode_regression(tmp_path: Path) -> None:
     summary = _write_summary(tmp_path)
     disagg = tmp_path / "disaggregation.csv"
@@ -174,25 +336,70 @@ def test_strategy_advisor_serializes_json_and_markdown(tmp_path: Path) -> None:
     assert "Needs More Data" in markdown
 
 
-def _write_summary(tmp_path: Path) -> Path:
-    summary = tmp_path / "summary.csv"
+def test_strategy_advisor_markdown_renders_confidence_rationale(tmp_path: Path) -> None:
+    summary = _write_summary(tmp_path, provider="local", requests=2)
+    speculative = tmp_path / "speculative_decoding.csv"
     pd.DataFrame(
         [
             {
-                "experiment_id": "exp",
-                "provider": "mock",
+                "provider": "local",
                 "engine": "vllm",
                 "model_id": "model",
-                "strategy": "baseline",
-                "workload": "shared_prefix_long_doc",
-                "concurrency": 1,
-                "requests": 4,
-                "success_rate": 1.0,
-                "quality_score_mean": 1.0,
-                "missing_metrics": "",
+                "workload": "decode_heavy",
+                "output_token_bucket": 256,
+                "baseline_strategy": "baseline",
+                "speculative_strategy": "speculative_decoding",
+                "e2e_delta_pct": -24.0,
+                "throughput_delta_pct": 33.333,
+                "quality_delta": -0.01,
+                "speculative_success_rate": 1.0,
+                "missing_metrics": "speculative_acceptance_rate",
+                "requests": 2,
+                "speculative_decoding_interpretation": "speculative_decoding_promising",
             }
         ]
-    ).to_csv(summary, index=False)
+    ).to_csv(speculative, index=False)
+
+    report = build_strategy_advisor_report(
+        summary_path=summary,
+        spec_decoding_input_path=speculative,
+    )
+    markdown = render_strategy_advisor_markdown(report)
+
+    assert "Confidence rationale:" in markdown
+    assert "confidence score:" in markdown
+    assert "missing telemetry" in markdown
+    assert "Next experiment priority:" in markdown
+
+
+def _write_summary(
+    tmp_path: Path,
+    *,
+    provider: str = "mock",
+    requests: int = 4,
+    missing_metrics: str = "",
+    source_type: str | None = None,
+    endpoint_type: str | None = None,
+) -> Path:
+    summary = tmp_path / "summary.csv"
+    row = {
+        "experiment_id": "exp",
+        "provider": provider,
+        "engine": "vllm",
+        "model_id": "model",
+        "strategy": "baseline",
+        "workload": "shared_prefix_long_doc",
+        "concurrency": 1,
+        "requests": requests,
+        "success_rate": 1.0,
+        "quality_score_mean": 1.0,
+        "missing_metrics": missing_metrics,
+    }
+    if source_type is not None:
+        row["source_type"] = source_type
+    if endpoint_type is not None:
+        row["endpoint_type"] = endpoint_type
+    pd.DataFrame([row]).to_csv(summary, index=False)
     return summary
 
 

@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 
 from kvoptbench.analysis.summarize import summarize_results
-from kvoptbench.schemas import RequestResult
+from kvoptbench.schemas import MetricProvenance, RequestResult
 
 
 def test_summary_aggregation_creates_csv(tmp_path: Path) -> None:
@@ -89,4 +89,46 @@ def test_summary_aggregation_includes_reasoning_and_tool_call_columns(tmp_path: 
     assert summary.loc[0, "reasoning_tokens_mean"] == 8.0
     assert summary.loc[0, "first_reasoning_token_ms_p50"] >= 100
     assert summary.loc[0, "tool_call_count_mean"] == 0.5
+
+
+def test_summary_aggregation_includes_metric_provenance(tmp_path: Path) -> None:
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    output = tmp_path / "summary.csv"
+    row = RequestResult(
+        run_id="run-1",
+        experiment_id="exp",
+        provider="mock",
+        engine="mock",
+        model_id="model",
+        strategy="baseline",
+        workload="shared_prefix_long_doc",
+        task_id="task-1",
+        concurrency=1,
+        ttft_ms=100.0,
+        success=True,
+        metric_provenance={
+            "ttft_ms": MetricProvenance(
+                source_type="client_observed",
+                measurement_method="stream timing",
+                unit="ms",
+            ),
+            "gpu_memory_peak_gb": MetricProvenance(
+                source_type="gpu_reported",
+                measurement_method="GPU telemetry adapter",
+                unit="GB",
+                available=False,
+                missing_reason="GPU telemetry was not collected for this run.",
+            ),
+        },
+    ).model_dump()
+    (raw_dir / "results.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    summarize_results(input_path=raw_dir, output_path=output)
+
+    summary = pd.read_csv(output)
+    assert "metric_provenance" in summary.columns
+    assert "ttft_ms:client_observed" in summary.loc[0, "metric_source_types"]
+    assert "gpu_memory_peak_gb:gpu_reported" in summary.loc[0, "metric_source_types"]
+    assert "GPU telemetry was not collected" in summary.loc[0, "unavailable_metric_reasons"]
 

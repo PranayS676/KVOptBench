@@ -8,7 +8,14 @@ import uvicorn
 
 from kvoptbench.mock_server.main import create_app
 from kvoptbench.runner.experiment import run_experiment
-from kvoptbench.schemas import EndpointHealth, RequestResult, TimedResponse, WorkloadItem
+from kvoptbench.schemas import (
+    EndpointHealth,
+    MetricProvenance,
+    RequestResult,
+    RunEnvironmentSnapshot,
+    TimedResponse,
+    WorkloadItem,
+)
 from kvoptbench.workloads.generate import generate_to_file
 
 
@@ -77,6 +84,10 @@ def test_runner_writes_valid_result_rows(tmp_path: Path) -> None:
             assert result.ttft_ms is not None
             assert result.e2e_latency_ms is not None
             assert result.output_tokens > 0
+            assert result.environment is not None
+            assert result.metric_provenance["ttft_ms"].source_type == "client_observed"
+            assert result.metric_provenance["input_tokens"].source_type == "estimated"
+            assert result.metric_provenance["cache_hit_rate"].source_type == "engine_reported"
             assert "shared_prefix_ratio" in result.metadata["workload_metadata"]
     finally:
         server.should_exit = True
@@ -151,5 +162,39 @@ def test_runner_writes_reasoning_compatibility_fields(monkeypatch, tmp_path: Pat
     assert result.first_reasoning_token_ms == 42.0
     assert result.visible_answer_missing is True
     assert result.provider_completion_tokens == 9
+    assert result.metric_provenance["provider_completion_tokens"].source_type == "provider_reported"
+    assert result.metric_provenance["reasoning_tokens"].source_type == "estimated"
+    assert result.metric_provenance["ttft_ms"].available is False
     assert result.metadata["response_metadata"]["finish_reason"] == "stop"
+
+
+def test_request_result_accepts_metric_provenance_and_environment_snapshot() -> None:
+    result = RequestResult(
+        run_id="run",
+        experiment_id="exp",
+        provider="mock",
+        engine="mock",
+        model_id="model",
+        strategy="baseline",
+        workload="shared_prefix",
+        task_id="task",
+        concurrency=1,
+        metric_provenance={
+            "ttft_ms": MetricProvenance(
+                source_type="client_observed",
+                measurement_method="time_to_first_stream_chunk",
+                unit="ms",
+            )
+        },
+        environment=RunEnvironmentSnapshot(
+            python_version="3.11.0",
+            platform="Windows",
+            kvoptbench_version="0.1.0",
+        ),
+    )
+
+    payload = result.model_dump(mode="json")
+
+    assert payload["metric_provenance"]["ttft_ms"]["source_type"] == "client_observed"
+    assert payload["environment"]["platform"] == "Windows"
 

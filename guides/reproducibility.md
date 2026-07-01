@@ -92,8 +92,9 @@ kvoptbench result-package \
   --output-dir results/packages/mock_public_example
 ```
 
-The package contains `run_manifest.json`, `missing_metrics.json`, `README_result.md`,
-artifact hashes, and copied inputs. It is local generated output and should not be committed.
+The package contains `run_manifest.json`, `missing_metrics.json`,
+`metric_provenance.json`, `README_result.md`, artifact hashes, and copied inputs.
+It is local generated output and should not be committed.
 
 ## Interpreting The Example
 
@@ -120,6 +121,19 @@ Before publishing real endpoint results, record:
 - repeated trials and run count
 - confidence intervals or a documented reason they are unavailable
 - effect size for each strategy comparison
+
+KVOptBench also provides Python helpers for non-GPU reproducibility foundations:
+
+- `kvoptbench.runner.schedule.build_schedule` creates deterministic repeated-run
+  schedules from config paths, repeat counts, seeds, and randomization flags.
+- `kvoptbench.analysis.statistics.compare_repeated_results` aggregates repeated
+  trials and computes confidence intervals and percent deltas.
+- `kvoptbench.telemetry.prometheus.parse_prometheus_samples` parses local
+  Prometheus text or JSON fixtures without network access.
+- `kvoptbench.telemetry.nvidia_smi.normalize_gpu_metrics` normalizes supplied
+  DCGM or `nvidia-smi` samples without requiring a live GPU.
+- `kvoptbench.importers.vllm_bench.import_vllm_bench` imports local vLLM bench
+  artifacts into KVOptBench-like rows while preserving missing metrics.
 
 ## Official Or Exploratory Results
 
