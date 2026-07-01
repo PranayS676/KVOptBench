@@ -35,6 +35,33 @@ def validate_config_command(
     print(f"[green]OK[/green] {config} -> {parsed.experiment_id}")
 
 
+@app.command("version")
+def version_command() -> None:
+    """Print the installed KVOptBench version."""
+    from kvoptbench import __version__
+
+    print(f"KVOptBench {__version__}")
+
+
+@app.command("release-check")
+def release_check_command(
+    repo_dir: Path = typer.Option(Path("."), "--repo-dir", help="Repository root to check."),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+) -> None:
+    """Run local public-release readiness checks."""
+    from kvoptbench.release import run_release_check
+
+    report = run_release_check(repo_dir)
+    if json_output:
+        typer.echo(json.dumps(report.model_dump(mode="json"), indent=2))
+    else:
+        for check in report.checks:
+            color = "green" if check.status == "ok" else "red"
+            print(f"[{color}]{check.status.upper()}[/{color}] {check.name}: {check.message}")
+    if not report.ok:
+        raise typer.Exit(code=1)
+
+
 @app.command("endpoint-check")
 def endpoint_check_command(
     config: Path = typer.Option(..., "--config", "-c", help="Experiment YAML config."),
