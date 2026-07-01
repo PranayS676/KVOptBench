@@ -141,6 +141,18 @@
       ],
       "default": null,
       "title": "Summary Path"
+    },
+    "telemetry_profile": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Telemetry Profile"
     }
   },
   "required": [

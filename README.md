@@ -243,6 +243,25 @@ Supported telemetry sources:
 - live `nvidia-smi` GPU memory sampling.
 - LMCache Prometheus metrics or structured JSON/JSONL exports.
 
+Named telemetry profiles provide reproducible defaults for common setups:
+
+```bash
+kvoptbench telemetry-profile list
+kvoptbench telemetry-profile show --profile vllm_live
+```
+
+Use a profile in experiment YAML, then override URLs or intervals for your environment:
+
+```yaml
+telemetry:
+  profile: vllm_live
+  prometheus:
+    - name: vllm
+      url: http://127.0.0.1:8000/metrics
+  gpu:
+    sample_interval_seconds: 0.5
+```
+
 Request JSONL rows keep lightweight references to these artifacts and copy
 available run-level fields such as `gpu_memory_peak_gb` and cache hit rate into
 the normal metric/provenance flow. Unavailable telemetry remains null and is

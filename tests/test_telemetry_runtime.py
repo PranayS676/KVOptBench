@@ -66,6 +66,7 @@ def test_telemetry_collector_writes_run_artifacts(tmp_path: Path) -> None:
     assert summary.metrics["engine_reported_cache_hit_rate"] == 0.7
     assert summary.metrics["lmcache_cache_hit_rate"] == 0.9
     assert summary.metrics["gpu_memory_peak_gb"] == 2.0
+    assert summary.telemetry_profile is None
     assert summary.snapshots_path == snapshots_path.as_posix()
     assert summary.summary_path == summary_path.as_posix()
     snapshots = [
@@ -73,6 +74,28 @@ def test_telemetry_collector_writes_run_artifacts(tmp_path: Path) -> None:
     ]
     assert {snapshot["phase"] for snapshot in snapshots} >= {"before_run", "after_run"}
     assert "gpu_memory_peak_gb" in summary_path.read_text(encoding="utf-8")
+
+
+def test_telemetry_collector_summary_preserves_profile_name(tmp_path: Path) -> None:
+    config = TelemetryConfig(
+        enabled=True,
+        profile="gpu_only",
+        output_dir=tmp_path / "telemetry",
+        gpu=GpuTelemetryConfig(enabled=True, sample_interval_seconds=None),
+    )
+    collector = TelemetryRunCollector(
+        config,
+        run_id="run-profile",
+        output_file=tmp_path / "results" / "raw" / "run.jsonl",
+        gpu_sample_provider=lambda: {"memory.used [MiB]": "1024 MiB"},
+    )
+
+    summary = asyncio.run(_run_collector(collector))
+
+    assert summary.telemetry_profile == "gpu_only"
+    assert summary.metrics["gpu_memory_peak_gb"] == 1.0
+    persisted = json.loads(Path(summary.summary_path or "").read_text(encoding="utf-8"))
+    assert persisted["telemetry_profile"] == "gpu_only"
 
 
 async def _run_collector(collector: TelemetryRunCollector):

@@ -9,6 +9,7 @@ import yaml
 from pydantic import ValidationError
 
 from kvoptbench.schemas import ExperimentConfig
+from kvoptbench.telemetry.profiles import apply_telemetry_profile_defaults
 
 
 class ConfigError(ValueError):
@@ -27,6 +28,11 @@ def load_config(path: str | Path) -> ExperimentConfig:
 
     if not isinstance(raw, dict):
         raise ConfigError("Experiment config must be a YAML mapping")
+
+    try:
+        raw = apply_telemetry_profile_defaults(raw, config_path=config_path)
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from exc
 
     try:
         return ExperimentConfig.model_validate(raw)

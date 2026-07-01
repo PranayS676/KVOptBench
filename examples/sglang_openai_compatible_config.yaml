@@ -20,6 +20,10 @@ retries: 2
 retry_backoff_seconds: 0.5
 capture_response_headers: true
 stream: true
+telemetry:
+  profile: sglang_live
+  enabled: false
+  output_dir: results/telemetry
 endpoint_metadata:
   note: Existing SGLang OpenAI-compatible endpoint. KVOptBench does not start the server.
 metadata:

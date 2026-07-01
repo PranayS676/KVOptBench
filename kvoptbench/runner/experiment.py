@@ -281,6 +281,7 @@ def _apply_telemetry_to_results(
         result.telemetry_snapshots_path = telemetry_summary.snapshots_path
         result.metadata["telemetry"] = {
             "run_id": telemetry_summary.run_id,
+            "profile": telemetry_summary.telemetry_profile,
             "summary_path": telemetry_summary.summary_path,
             "snapshots_path": telemetry_summary.snapshots_path,
             "snapshot_count": telemetry_summary.snapshot_count,

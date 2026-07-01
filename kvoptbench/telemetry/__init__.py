@@ -10,6 +10,11 @@ from kvoptbench.telemetry.prometheus import (
     scrape_prometheus_endpoint,
     scrape_prometheus_endpoints,
 )
+from kvoptbench.telemetry.profiles import (
+    TelemetryProfile,
+    get_telemetry_profile,
+    load_telemetry_profiles,
+)
 
 __all__ = [
     "GpuSampler",
@@ -17,6 +22,9 @@ __all__ = [
     "MissingMetric",
     "PrometheusScrapeResult",
     "TelemetrySnapshot",
+    "TelemetryProfile",
+    "get_telemetry_profile",
+    "load_telemetry_profiles",
     "normalize_gpu_metrics",
     "normalize_lmcache_metrics",
     "parse_lmcache_jsonl",
