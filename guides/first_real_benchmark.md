@@ -21,6 +21,7 @@ Good first target:
 - passes: cold and warm
 - items: 50-100 shared-prefix and 50-100 random-prefix rows
 - output: raw JSONL, summary CSV, cache comparison CSV, report, and strategy advisor
+- methodology: randomized condition order, repeated trials, and documented metric provenance
 
 Use RunPod, Lambda Cloud, local GPU, bare metal, or another provider. The provider only needs to
 expose a normal HTTP endpoint that KVOptBench can reach.
@@ -29,6 +30,10 @@ Do not compare vLLM and SGLang in the first public result unless the model revis
 tokenizer, dataset manifests, prompt template, hardware class, concurrency, output settings,
 request order, timeout policy, and retry policy all match. A single-engine result with
 strong controls is the better first public claim.
+
+Read `guides/benchmark_validity.md` and `guides/metric_provenance.md` before publishing
+the result package. A run that lacks random-prefix controls, randomized condition order,
+repeated trials, or metric provenance should be labeled exploratory.
 
 ## Preflight
 
@@ -195,6 +200,12 @@ kvoptbench report \
 For SGLang, set `--engine sglang` and use the SGLang endpoint URL. For RunPod or Lambda Cloud,
 set `--provider` accordingly and use the reachable proxy or instance URL.
 
+For publishable runs, keep a record of the plan order. Prefer randomized condition order
+with a recorded seed so cold/warm, cache-on/cache-off, shared-prefix, and random-prefix
+conditions are not biased by queue, cache, or thermal drift. Run repeated trials for each
+condition and report run count, p50, p95, confidence intervals, and effect size when those
+statistics are available.
+
 ## Strategy Advisor
 
 Once comparison CSVs exist, generate advisor outputs:
@@ -258,6 +269,12 @@ Before publishing, review the generated files and fill any remaining manual deta
 - summary and comparison CSV paths
 - report path
 - plots directory, if generated
+- randomized condition order and seed
+- repetition count
+- confidence intervals or the reason they are unavailable
+- effect size for each strategy comparison
+- metric provenance for client-observed, provider-reported, engine-reported,
+  gpu-reported, imported, derived, and estimated metrics
 - `engine_reported_cache_hit_rate`, when exposed by the backend
 - `cache_hit_proxy`, when derived by KVOptBench
 - `missing_metrics`

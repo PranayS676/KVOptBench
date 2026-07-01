@@ -43,6 +43,11 @@ KVOptBench expects an OpenAI-compatible HTTP endpoint:
 - optional streaming responses
 - optional `/metrics` or other backend telemetry endpoint
 
+For stronger strategy evidence, expose Prometheus metrics when the backend supports them
+and capture GPU memory with `nvidia-smi`, DCGM, or an equivalent provider metric. Missing
+telemetry is acceptable for exploratory runs, but it should lower advisor confidence when
+the missing field affects the recommendation.
+
 The config fields that must match the running server are:
 
 - `provider`
@@ -168,6 +173,8 @@ Record these fields in `examples/public_release/result_template.md` before publi
 - server command and all flags
 - GPU type and count
 - driver/CUDA/runtime image
+- Prometheus metrics endpoint, if available
+- `nvidia-smi` or GPU telemetry source, if available
 - workload file hash
 - config file hash
 - raw JSONL result location
@@ -176,6 +183,8 @@ Record these fields in `examples/public_release/result_template.md` before publi
 - strategy advisor JSON hash
 - `missing_metrics`
 - whether the run is exploratory or official
+- metric provenance for client, provider, engine, GPU, imported, derived, and estimated fields
+- randomized condition order, seed, repetitions, confidence intervals, and effect size
 
 ## Missing Metrics Rules
 

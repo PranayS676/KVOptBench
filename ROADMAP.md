@@ -118,6 +118,14 @@
 - Redacted config snapshots to avoid publishing endpoint URLs or secret-bearing fields
 - README and reproducibility guide updates for local package generation
 
+## Done: Benchmark Methodology Documentation
+
+- Public benchmark validity guide for mock, synthetic, exploratory, and publishable results
+- Public metric provenance guide for client, provider, engine, GPU, imported, derived, and estimated metrics
+- First real benchmark guidance for randomized condition order, repeated trials, and confidence intervals
+- Real endpoint telemetry expectations for Prometheus and GPU memory capture
+- Result template fields for run order, repetitions, effect size, advisor confidence, and metric provenance
+
 ## Next: Real Endpoint Result Collection
 
 - First public cache run on one real vLLM or SGLang endpoint
