@@ -49,6 +49,13 @@ def test_result_package_collects_artifacts_and_provenance(tmp_path: Path) -> Non
     assert manifest["summary"]["engines"] == ["vllm"]
     assert manifest["summary"]["workloads"] == ["qasper_shared_prefix"]
     assert manifest["artifact_count"] == len(manifest["artifacts"])
+    telemetry_artifacts = [
+        artifact for artifact in manifest["artifacts"] if artifact["role"] == "telemetry"
+    ]
+    assert {artifact["original_name"] for artifact in telemetry_artifacts} == {
+        "telemetry_summary.json",
+        "telemetry_snapshots.jsonl",
+    }
     assert manifest["workload_provenance"][0]["sha256"] == sha256_file(inputs["workload"])
     assert manifest["dataset_provenance"][0]["adapter_name"] == "qasper"
     assert manifest["dataset_provenance"][0]["dataset_source_url"].startswith(
@@ -118,6 +125,18 @@ def test_result_package_cli_writes_manifest(tmp_path: Path) -> None:
 def _write_package_inputs(tmp_path: Path) -> dict[str, Path]:
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()
+    telemetry_dir = tmp_path / "telemetry" / "run-1"
+    telemetry_dir.mkdir(parents=True)
+    telemetry_summary = telemetry_dir / "telemetry_summary.json"
+    telemetry_snapshots = telemetry_dir / "telemetry_snapshots.jsonl"
+    telemetry_summary.write_text(
+        json.dumps({"run_id": "run-1", "metrics": {"gpu_memory_peak_gb": 12.0}}) + "\n",
+        encoding="utf-8",
+    )
+    telemetry_snapshots.write_text(
+        json.dumps({"run_id": "run-1", "phase": "after_run"}) + "\n",
+        encoding="utf-8",
+    )
     raw_rows = [
         {
             "run_id": "run-1",
@@ -139,6 +158,8 @@ def _write_package_inputs(tmp_path: Path) -> dict[str, Path]:
             "tpot_ms": 8.0,
             "e2e_latency_ms": 420.0,
             "success": True,
+            "telemetry_summary_path": telemetry_summary.as_posix(),
+            "telemetry_snapshots_path": telemetry_snapshots.as_posix(),
             "missing_metrics": ["cache_hit_rate", "gpu_memory_peak_gb"],
             "metric_provenance": {
                 "ttft_ms": {

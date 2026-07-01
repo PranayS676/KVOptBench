@@ -9,6 +9,12 @@ from typing import Any
 
 import pandas as pd
 
+from kvoptbench.analysis.comparison_stats import (
+    add_group_metric_stats,
+    repeated_comparison_columns,
+    repeated_comparison_fields,
+)
+
 QUALITY_REGRESSION_THRESHOLD = -0.05
 LATENCY_REGRESSION_PCT = 20.0
 DECODE_REGRESSION_PCT = 20.0
@@ -16,6 +22,18 @@ LATENCY_IMPROVEMENT_PCT = -5.0
 DECODE_IMPROVEMENT_PCT = -5.0
 THROUGHPUT_IMPROVEMENT_PCT = 5.0
 SUCCESS_RATE_FLOOR = 0.95
+REPEATED_METRIC_SPECS = [
+    ("baseline_ttft_ms", "disaggregated_ttft_ms", "ttft_ms"),
+    ("baseline_tpot_ms", "disaggregated_tpot_ms", "tpot_ms"),
+    ("baseline_itl_ms", "disaggregated_itl_ms", "itl_ms"),
+    ("baseline_e2e_latency_ms", "disaggregated_e2e_latency_ms", "e2e_latency_ms"),
+    (
+        "baseline_output_tokens_per_second",
+        "disaggregated_output_tokens_per_second",
+        "output_tokens_per_second",
+    ),
+    ("baseline_quality_score", "disaggregated_quality_score", "quality_score"),
+]
 
 PREFILL_DECODE_DISAGGREGATION_COLUMNS = [
     "provider",
@@ -50,6 +68,7 @@ PREFILL_DECODE_DISAGGREGATION_COLUMNS = [
     "disaggregated_success_rate",
     "success_rate_delta",
     "disaggregation_interpretation",
+    *repeated_comparison_columns(REPEATED_METRIC_SPECS),
 ]
 
 
@@ -229,6 +248,18 @@ def _aggregate_by_strategy(frame: pd.DataFrame) -> pd.DataFrame:
                 "missing_metrics": _missing_metrics(group),
             }
         )
+        add_group_metric_stats(
+            row,
+            group,
+            [
+                "ttft_ms",
+                "tpot_ms",
+                "itl_ms",
+                "e2e_latency_ms",
+                "output_tokens_per_second",
+                "quality_score",
+            ],
+        )
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -258,7 +289,7 @@ def _build_comparison_row(
     throughput_delta_pct = _delta_pct(disaggregated_tps, baseline_tps)
     success_rate_delta = _subtract(disaggregated_success_rate, baseline_success_rate)
 
-    return {
+    row = {
         **by_group,
         "input_token_bucket": _nullable_int(by_group.get("input_token_bucket")),
         "output_token_bucket": _nullable_int(by_group.get("output_token_bucket")),
@@ -300,6 +331,40 @@ def _build_comparison_row(
             disaggregated_success_rate=disaggregated_success_rate,
         ),
     }
+    for source_metric, baseline_prefix, candidate_prefix, effect_prefix in [
+        ("ttft_ms", "baseline_ttft_ms", "disaggregated_ttft_ms", "ttft_ms"),
+        ("tpot_ms", "baseline_tpot_ms", "disaggregated_tpot_ms", "tpot_ms"),
+        ("itl_ms", "baseline_itl_ms", "disaggregated_itl_ms", "itl_ms"),
+        (
+            "e2e_latency_ms",
+            "baseline_e2e_latency_ms",
+            "disaggregated_e2e_latency_ms",
+            "e2e_latency_ms",
+        ),
+        (
+            "output_tokens_per_second",
+            "baseline_output_tokens_per_second",
+            "disaggregated_output_tokens_per_second",
+            "output_tokens_per_second",
+        ),
+        (
+            "quality_score",
+            "baseline_quality_score",
+            "disaggregated_quality_score",
+            "quality_score",
+        ),
+    ]:
+        row.update(
+            repeated_comparison_fields(
+                baseline,
+                disaggregated,
+                source_metric=source_metric,
+                baseline_prefix=baseline_prefix,
+                candidate_prefix=candidate_prefix,
+                effect_prefix=effect_prefix,
+            )
+        )
+    return row
 
 
 def _strategy_row(group: pd.DataFrame, strategy: str) -> pd.Series | None:

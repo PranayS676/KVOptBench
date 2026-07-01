@@ -121,7 +121,7 @@ def scrape_prometheus_endpoints(
     *,
     client: Any | None = None,
 ) -> list[PrometheusScrapeResult]:
-    """Scrape multiple configured Prometheus endpoints without runner wiring."""
+    """Scrape multiple configured Prometheus endpoints."""
     results: list[PrometheusScrapeResult] = []
     for endpoint in endpoints:
         results.append(

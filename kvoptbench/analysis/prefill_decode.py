@@ -9,6 +9,8 @@ from typing import Any
 
 import pandas as pd
 
+from kvoptbench.analysis.statistics import flatten_metric_stats, mean_effect_size_from_stats
+
 TTFT_BOUNDARY_MS = 300.0
 DECODE_BOUNDARY_MS = 30.0
 
@@ -20,6 +22,7 @@ PREFILL_DECODE_COLUMNS = [
     "input_token_bucket",
     "output_token_bucket",
     "expected_bottleneck",
+    "ttft_ms_mean",
     "ttft_ms_p50",
     "ttft_ms_p95",
     "tpot_ms_mean",
@@ -29,6 +32,29 @@ PREFILL_DECODE_COLUMNS = [
     "missing_metrics",
     "requests",
     "success_rate",
+    "ttft_ms_count",
+    "ttft_ms_std",
+    "ttft_ms_ci95_low",
+    "ttft_ms_ci95_high",
+    "ttft_ms_stats_status",
+    "tpot_ms_count",
+    "tpot_ms_std",
+    "tpot_ms_ci95_low",
+    "tpot_ms_ci95_high",
+    "tpot_ms_stats_status",
+    "itl_ms_count",
+    "itl_ms_std",
+    "itl_ms_ci95_low",
+    "itl_ms_ci95_high",
+    "itl_ms_stats_status",
+    "output_tokens_per_second_count",
+    "output_tokens_per_second_std",
+    "output_tokens_per_second_ci95_low",
+    "output_tokens_per_second_ci95_high",
+    "output_tokens_per_second_stats_status",
+    "ttft_ms_effect_size_vs_baseline",
+    "tpot_ms_effect_size_vs_baseline",
+    "itl_ms_effect_size_vs_baseline",
 ]
 
 
@@ -137,12 +163,31 @@ def build_prefill_decode_comparison(frame: pd.DataFrame) -> pd.DataFrame:
                 "success_rate": round(successes / requests, 4) if requests else None,
             }
         )
+        for metric in ["ttft_ms", "tpot_ms", "itl_ms", "output_tokens_per_second"]:
+            stats = flatten_metric_stats(metric, group[metric])
+            row.update(
+                {
+                    key: value
+                    for key, value in stats.items()
+                    if key.endswith(
+                        (
+                            "_count",
+                            "_mean",
+                            "_std",
+                            "_ci95_low",
+                            "_ci95_high",
+                            "_stats_status",
+                        )
+                    )
+                }
+            )
         rows.append(row)
 
     result = pd.DataFrame(rows, columns=PREFILL_DECODE_COLUMNS)
-    return result.sort_values(
+    result = result.sort_values(
         ["provider", "engine", "model_id", "strategy", "input_token_bucket", "output_token_bucket"]
     ).reset_index(drop=True)
+    return _add_effect_sizes(result)
 
 
 def classify_bottleneck(
@@ -217,6 +262,29 @@ def _missing_metrics(group: pd.DataFrame) -> str:
         elif isinstance(value, str) and value:
             missing.update(value.split(";"))
     return ";".join(sorted(item for item in missing if item))
+
+
+def _add_effect_sizes(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame.empty:
+        return frame
+    enriched = frame.copy()
+    group_cols = ["provider", "engine", "model_id", "strategy"]
+    for _, index in enriched.groupby(group_cols, dropna=False).groups.items():
+        group = enriched.loc[index].sort_values(["input_token_bucket", "output_token_bucket"])
+        baseline = group.iloc[0]
+        for row_index, row in group.iterrows():
+            for metric in ["ttft_ms", "tpot_ms", "itl_ms"]:
+                enriched.loc[row_index, f"{metric}_effect_size_vs_baseline"] = (
+                    mean_effect_size_from_stats(
+                        baseline_mean=baseline.get(f"{metric}_mean"),
+                        baseline_std=baseline.get(f"{metric}_std"),
+                        baseline_count=baseline.get(f"{metric}_count"),
+                        candidate_mean=row.get(f"{metric}_mean"),
+                        candidate_std=row.get(f"{metric}_std"),
+                        candidate_count=row.get(f"{metric}_count"),
+                    )
+                )
+    return enriched[PREFILL_DECODE_COLUMNS]
 
 
 def main() -> None:

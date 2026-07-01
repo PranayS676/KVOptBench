@@ -33,7 +33,10 @@ __all__ = [
     "aggregate_repeated_results",
     "compare_aggregates",
     "compare_repeated_results",
+    "flatten_metric_stats",
     "load_results",
+    "mean_effect_size",
+    "mean_effect_size_from_stats",
     "percent_delta",
     "summarize_metric_values",
 ]
@@ -99,6 +102,82 @@ def summarize_metric_values(values: Iterable[Any]) -> dict[str, float | int | No
         "ci95_low": ci95_low,
         "ci95_high": ci95_high,
     }
+
+
+def flatten_metric_stats(prefix: str, values: Iterable[Any]) -> dict[str, float | int | str | None]:
+    """Return stable repeated-run columns for one metric prefix."""
+    stats = summarize_metric_values(values)
+    count = int(stats["count"] or 0)
+    return {
+        f"{prefix}_count": count,
+        f"{prefix}_mean": stats["mean"],
+        f"{prefix}_p50": stats["p50"],
+        f"{prefix}_p95": stats["p95"],
+        f"{prefix}_std": stats["std"],
+        f"{prefix}_ci95_low": stats["ci95_low"],
+        f"{prefix}_ci95_high": stats["ci95_high"],
+        f"{prefix}_stats_status": "ok"
+        if count >= 2
+        else ("missing_metric" if count == 0 else "insufficient_repetitions"),
+    }
+
+
+def mean_effect_size(
+    baseline_values: Iterable[Any],
+    candidate_values: Iterable[Any],
+) -> float | None:
+    """Return Cohen's d effect size from repeated baseline/candidate samples."""
+    baseline = _valid_numeric_values(baseline_values)
+    candidate = _valid_numeric_values(candidate_values)
+    if len(baseline) < 2 or len(candidate) < 2:
+        return None
+    baseline_std = statistics.stdev(baseline)
+    candidate_std = statistics.stdev(candidate)
+    pooled_variance = (
+        ((len(baseline) - 1) * baseline_std**2)
+        + ((len(candidate) - 1) * candidate_std**2)
+    ) / (len(baseline) + len(candidate) - 2)
+    if pooled_variance <= 0:
+        return None
+    pooled_std = math.sqrt(pooled_variance)
+    if pooled_std == 0:
+        return None
+    return _round((statistics.fmean(candidate) - statistics.fmean(baseline)) / pooled_std)
+
+
+def mean_effect_size_from_stats(
+    *,
+    baseline_mean: float | int | None,
+    baseline_std: float | int | None,
+    baseline_count: float | int | None,
+    candidate_mean: float | int | None,
+    candidate_std: float | int | None,
+    candidate_count: float | int | None,
+) -> float | None:
+    """Return Cohen's d from pre-aggregated mean/std/count fields."""
+    b_mean = _as_float_or_none(baseline_mean)
+    c_mean = _as_float_or_none(candidate_mean)
+    b_std = _as_float_or_none(baseline_std)
+    c_std = _as_float_or_none(candidate_std)
+    b_count = _as_float_or_none(baseline_count)
+    c_count = _as_float_or_none(candidate_count)
+    if (
+        b_mean is None
+        or c_mean is None
+        or b_std is None
+        or c_std is None
+        or b_count is None
+        or c_count is None
+        or b_count < 2
+        or c_count < 2
+    ):
+        return None
+    pooled_variance = (((b_count - 1) * b_std**2) + ((c_count - 1) * c_std**2)) / (
+        b_count + c_count - 2
+    )
+    if pooled_variance <= 0:
+        return None
+    return _round((c_mean - b_mean) / math.sqrt(pooled_variance))
 
 
 def aggregate_repeated_results(

@@ -9,7 +9,7 @@ from typing import Any
 
 import pandas as pd
 
-from kvoptbench.analysis.statistics import summarize_metric_values
+from kvoptbench.analysis.statistics import mean_effect_size, summarize_metric_values
 from kvoptbench.analysis.cache import (
     cache_miss_penalty_ms,
     infer_workload_profile,
@@ -45,6 +45,8 @@ CACHE_COMPARISON_COLUMNS = [
     "shared_cache_miss_penalty_ms",
     "random_cache_miss_penalty_ms",
     "control_adjusted_cache_gain_ms",
+    "shared_cache_effect_size",
+    "random_cache_effect_size",
     "shared_prefix_tokens",
     "miss_penalty_per_1k_tokens",
     "interpretation",
@@ -92,6 +94,10 @@ def build_cache_comparison(frame: pd.DataFrame) -> pd.DataFrame:
         shared_warm_stats = _ttft_stats(group, "shared_prefix", "warm")
         random_cold_stats = _ttft_stats(group, "random_prefix", "cold")
         random_warm_stats = _ttft_stats(group, "random_prefix", "warm")
+        shared_cold_values = _ttft_values(group, "shared_prefix", "cold")
+        shared_warm_values = _ttft_values(group, "shared_prefix", "warm")
+        random_cold_values = _ttft_values(group, "random_prefix", "cold")
+        random_warm_values = _ttft_values(group, "random_prefix", "warm")
         shared_cold = shared_cold_stats["mean"]
         shared_warm = shared_warm_stats["mean"]
         random_cold = random_cold_stats["mean"]
@@ -118,6 +124,12 @@ def build_cache_comparison(frame: pd.DataFrame) -> pd.DataFrame:
                 "shared_cache_miss_penalty_ms": shared_penalty,
                 "random_cache_miss_penalty_ms": random_penalty,
                 "control_adjusted_cache_gain_ms": control_adjusted,
+                "shared_cache_effect_size": mean_effect_size(
+                    shared_cold_values, shared_warm_values
+                ),
+                "random_cache_effect_size": mean_effect_size(
+                    random_cold_values, random_warm_values
+                ),
                 "shared_prefix_tokens": shared_prefix_tokens,
                 "miss_penalty_per_1k_tokens": miss_penalty_per_1k_tokens(
                     shared_penalty, shared_prefix_tokens
@@ -147,9 +159,7 @@ def _read_rows(input_path: Path) -> list[dict[str, Any]]:
 
 
 def _ttft_stats(group: pd.DataFrame, workload_profile: str, cache_state: str) -> dict[str, Any]:
-    values = group[
-        (group["_workload_profile"] == workload_profile) & (group["cache_state"] == cache_state)
-    ]["ttft_ms"].dropna()
+    values = _ttft_values(group, workload_profile, cache_state)
     stats = summarize_metric_values(values)
     return {
         **stats,
@@ -159,6 +169,12 @@ def _ttft_stats(group: pd.DataFrame, workload_profile: str, cache_state: str) ->
         if int(stats["count"] or 0) == 1
         else "missing_metric",
     }
+
+
+def _ttft_values(group: pd.DataFrame, workload_profile: str, cache_state: str) -> pd.Series:
+    return group[
+        (group["_workload_profile"] == workload_profile) & (group["cache_state"] == cache_state)
+    ]["ttft_ms"].dropna()
 
 
 def _render_repeated_stats(prefix: str, stats: dict[str, Any]) -> dict[str, Any]:

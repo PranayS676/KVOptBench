@@ -34,6 +34,8 @@ def test_compare_prefix_sweep_results_groups_by_shared_prefix_ratio(tmp_path) ->
     assert frame.iloc[0]["interpretation"] == "no_prefix_overlap"
     assert set(frame.iloc[1:]["interpretation"]) == {"meaningful_prefix_cache_gain"}
     assert frame.iloc[-1]["miss_penalty_per_1k_tokens"] == 200.0
+    assert "cold_ttft_ms_stats_status" in frame.columns
+    assert "ttft_ms_effect_size" in frame.columns
 
 
 def test_compare_prefix_sweep_results_keeps_missing_metrics_null(tmp_path) -> None:

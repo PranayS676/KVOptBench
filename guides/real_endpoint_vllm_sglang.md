@@ -48,6 +48,14 @@ and capture GPU memory with `nvidia-smi`, DCGM, or an equivalent provider metric
 telemetry is acceptable for exploratory runs, but it should lower advisor confidence when
 the missing field affects the recommendation.
 
+KVOptBench can collect live run-window telemetry when configured. Telemetry snapshots are
+written as run-level artifacts instead of being embedded in every request row:
+
+```text
+results/telemetry/<run_id>/telemetry_snapshots.jsonl
+results/telemetry/<run_id>/telemetry_summary.json
+```
+
 The config fields that must match the running server are:
 
 - `provider`
@@ -83,6 +91,22 @@ endpoint_type: vllm
 base_url: http://127.0.0.1:8000/v1
 model_id: your/model
 strategy: baseline
+telemetry:
+  enabled: true
+  output_dir: results/telemetry
+  prometheus:
+    - name: vllm
+      url: http://127.0.0.1:8000/metrics
+      scrape_phases: [before_run, during_run, after_run]
+      scrape_interval_seconds: 1
+      expected_metrics:
+        - engine_reported_cache_hit_rate
+      metric_aliases:
+        vllm:prefix_cache_hit_rate: engine_reported_cache_hit_rate
+  gpu:
+    enabled: true
+    provider: nvidia_smi
+    sample_interval_seconds: 1
 ```
 
 For prefix-cache experiments, run a cache-on variant with `--enable-prefix-caching` and compare it to a cache-disabled or baseline control appropriate for the installed vLLM version.
@@ -175,6 +199,7 @@ Record these fields in `examples/public_release/result_template.md` before publi
 - driver/CUDA/runtime image
 - Prometheus metrics endpoint, if available
 - `nvidia-smi` or GPU telemetry source, if available
+- telemetry snapshot and summary artifact paths, if telemetry was enabled
 - workload file hash
 - config file hash
 - raw JSONL result location

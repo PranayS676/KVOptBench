@@ -121,6 +121,7 @@ Before publishing real endpoint results, record:
 - repeated trials and run count
 - confidence intervals or a documented reason they are unavailable
 - effect size for each strategy comparison
+- telemetry snapshots and summaries when live Prometheus, GPU, or LMCache telemetry is enabled
 
 KVOptBench also provides Python helpers for non-GPU reproducibility foundations:
 
@@ -132,6 +133,10 @@ KVOptBench also provides Python helpers for non-GPU reproducibility foundations:
   Prometheus text or JSON fixtures without network access.
 - `kvoptbench.telemetry.nvidia_smi.normalize_gpu_metrics` normalizes supplied
   DCGM or `nvidia-smi` samples without requiring a live GPU.
+- `kvoptbench.telemetry.runtime` writes before/during/after run telemetry
+  snapshots and a run-level telemetry summary when configured.
+- `kvoptbench.telemetry.lmcache` normalizes LMCache Prometheus or structured
+  JSON/JSONL telemetry without requiring LMCache in local tests.
 - `kvoptbench.importers.vllm_bench.import_vllm_bench` imports local vLLM bench
   artifacts into KVOptBench-like rows while preserving missing metrics.
 

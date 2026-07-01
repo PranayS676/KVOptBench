@@ -9,11 +9,27 @@ from typing import Any
 
 import pandas as pd
 
+from kvoptbench.analysis.comparison_stats import (
+    add_group_metric_stats,
+    repeated_comparison_columns,
+    repeated_comparison_fields,
+)
+
 QUALITY_REGRESSION_THRESHOLD = -0.05
 LATENCY_REGRESSION_PCT = 20.0
 LATENCY_IMPROVEMENT_PCT = -5.0
 THROUGHPUT_IMPROVEMENT_PCT = 5.0
 SUCCESS_RATE_FLOOR = 0.95
+REPEATED_METRIC_SPECS = [
+    ("baseline_ttft_ms", "speculative_ttft_ms", "ttft_ms"),
+    ("baseline_e2e_latency_ms", "speculative_e2e_latency_ms", "e2e_latency_ms"),
+    (
+        "baseline_output_tokens_per_second",
+        "speculative_output_tokens_per_second",
+        "output_tokens_per_second",
+    ),
+    ("baseline_quality_score", "speculative_quality_score", "quality_score"),
+]
 
 SPECULATIVE_DECODING_COLUMNS = [
     "provider",
@@ -41,6 +57,7 @@ SPECULATIVE_DECODING_COLUMNS = [
     "speculative_success_rate",
     "success_rate_delta",
     "speculative_decoding_interpretation",
+    *repeated_comparison_columns(REPEATED_METRIC_SPECS),
 ]
 
 
@@ -172,6 +189,16 @@ def _aggregate_by_strategy(frame: pd.DataFrame) -> pd.DataFrame:
                 "missing_metrics": _missing_metrics(group),
             }
         )
+        add_group_metric_stats(
+            row,
+            group,
+            [
+                "ttft_ms",
+                "e2e_latency_ms",
+                "output_tokens_per_second",
+                "quality_score",
+            ],
+        )
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -195,7 +222,7 @@ def _build_comparison_row(
     throughput_delta_pct = _delta_pct(speculative_tps, baseline_tps)
     success_rate_delta = _subtract(speculative_success_rate, baseline_success_rate)
 
-    return {
+    row = {
         **by_group,
         "output_token_bucket": _nullable_int(by_group.get("output_token_bucket")),
         "baseline_strategy": str(baseline.get("strategy")),
@@ -228,6 +255,38 @@ def _build_comparison_row(
             speculative_success_rate=speculative_success_rate,
         ),
     }
+    for source_metric, baseline_prefix, candidate_prefix, effect_prefix in [
+        ("ttft_ms", "baseline_ttft_ms", "speculative_ttft_ms", "ttft_ms"),
+        (
+            "e2e_latency_ms",
+            "baseline_e2e_latency_ms",
+            "speculative_e2e_latency_ms",
+            "e2e_latency_ms",
+        ),
+        (
+            "output_tokens_per_second",
+            "baseline_output_tokens_per_second",
+            "speculative_output_tokens_per_second",
+            "output_tokens_per_second",
+        ),
+        (
+            "quality_score",
+            "baseline_quality_score",
+            "speculative_quality_score",
+            "quality_score",
+        ),
+    ]:
+        row.update(
+            repeated_comparison_fields(
+                baseline,
+                speculative,
+                source_metric=source_metric,
+                baseline_prefix=baseline_prefix,
+                candidate_prefix=candidate_prefix,
+                effect_prefix=effect_prefix,
+            )
+        )
+    return row
 
 
 def _strategy_row(group: pd.DataFrame, strategy: str) -> pd.Series | None:

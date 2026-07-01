@@ -69,6 +69,8 @@ def test_compare_long_context_results_classifies_pressure(tmp_path) -> None:
     assert by_bucket[262144]["pressure_classification"] == "failure_pressure"
     assert by_bucket[65536]["ttft_ms_p50"] == 750.0
     assert by_bucket[131072]["output_tokens_per_second_mean"] == 24.0
+    assert "ttft_ms_stats_status" in frame.columns
+    assert "ttft_ms_effect_size_vs_baseline" in frame.columns
 
 
 def test_compare_long_context_results_keeps_unavailable_metrics_null(tmp_path) -> None:

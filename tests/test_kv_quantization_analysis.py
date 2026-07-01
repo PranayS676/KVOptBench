@@ -61,6 +61,8 @@ def test_compare_kv_quantization_results_computes_deltas_and_interpretation(tmp_
     assert by_bucket[32768]["throughput_delta_pct"] == 13.333
     assert by_bucket[32768]["quality_delta"] == -0.01
     assert by_bucket[32768]["quantization_interpretation"] == "quantization_promising"
+    assert "baseline_ttft_ms_stats_status" in frame.columns
+    assert "ttft_ms_effect_size" in frame.columns
     assert by_bucket[65536]["quantization_interpretation"] == "quality_regression"
 
 

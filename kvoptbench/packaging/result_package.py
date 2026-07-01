@@ -160,6 +160,9 @@ def build_result_package(
     for artifact_path in extra_artifact_paths:
         _copy_file(artifact_path, output_dir / "artifacts", "artifact", artifacts)
 
+    for telemetry_path in _collect_telemetry_artifact_paths(raw_files):
+        _copy_file(telemetry_path, output_dir / "telemetry", "telemetry", artifacts)
+
     missing_metrics = _collect_missing_metrics(summary_rows, raw_files)
     missing_metric_entries = [MissingMetricEntry(metric=name) for name in missing_metrics]
     metric_provenance = _collect_metric_provenance(summary_rows, raw_files)
@@ -548,6 +551,41 @@ def _collect_metric_provenance(
         }
         for metric, values in sorted(collected.items())
     }
+
+
+def _collect_telemetry_artifact_paths(raw_files: list[Path]) -> list[Path]:
+    paths: dict[str, Path] = {}
+    for raw_file in raw_files:
+        with raw_file.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                for value in _telemetry_paths_from_row(payload):
+                    path = Path(value)
+                    if path.exists() and path.is_file():
+                        paths[path.resolve().as_posix()] = path
+    return [paths[key] for key in sorted(paths)]
+
+
+def _telemetry_paths_from_row(payload: dict[str, Any]) -> list[str]:
+    paths: list[str] = []
+    for key in ["telemetry_summary_path", "telemetry_snapshots_path"]:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            paths.append(value)
+    metadata = payload.get("metadata")
+    if isinstance(metadata, dict):
+        telemetry = metadata.get("telemetry")
+        if isinstance(telemetry, dict):
+            for key in ["summary_path", "snapshots_path"]:
+                value = telemetry.get(key)
+                if isinstance(value, str) and value.strip():
+                    paths.append(value)
+    return paths
 
 
 def _merge_metric_provenance_value(

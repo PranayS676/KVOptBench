@@ -72,6 +72,8 @@ def summarize_results(input_path: str | Path, output_path: str | Path) -> Path:
             "quality_score",
             "cache_hit_rate",
             "cache_miss_penalty_ms",
+            "gpu_memory_used_gb",
+            "gpu_memory_peak_gb",
         ]:
             raw_values = group[col] if col in group else pd.Series(dtype="float64")
             values = pd.to_numeric(raw_values, errors="coerce")

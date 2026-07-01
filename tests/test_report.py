@@ -36,6 +36,8 @@ def test_report_generator_creates_required_sections(tmp_path: Path) -> None:
                 "quality_score_mean": 1.0,
                 "cache_hit_rate_mean": 0.9,
                 "cache_miss_penalty_ms_mean": 250.0,
+                "gpu_memory_used_gb_mean": None,
+                "gpu_memory_peak_gb_mean": None,
                 "cache_interpretation": "credible_cache_reuse_signal",
                 "missing_metrics": "gpu_memory_used_gb;gpu_memory_peak_gb",
                 "metric_provenance": (
@@ -63,6 +65,8 @@ def test_report_generator_creates_required_sections(tmp_path: Path) -> None:
     assert "## Quality Summary" in report
     assert "## Cache Summary" in report
     assert "cache miss penalty ms" in report
+    assert "## Telemetry Summary" in report
+    assert "GPU peak GB" in report
     assert "## Metric Provenance" in report
     assert "`ttft_ms`" in report
     assert "`client_observed`" in report

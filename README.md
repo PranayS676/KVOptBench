@@ -53,7 +53,7 @@ The project currently includes:
 - request-level metric provenance and environment snapshots
 - deterministic repeated-run scheduling helpers
 - repeated-run statistical comparison helpers
-- offline Prometheus, DCGM, and `nvidia-smi` telemetry parsers
+- live Prometheus, LMCache, and `nvidia-smi` run-window telemetry capture with offline DCGM/parser support
 - vLLM bench import foundations
 - cache, prefix-overlap, prefill/decode, long-context, KV quantization, KV offload, speculative decoding, and disaggregation comparisons
 - public example bundle and report templates
@@ -154,6 +154,7 @@ Edit the config fields that match your server:
 - `workload_file`
 - `output_file`
 - `capture_reasoning_content`, optional and disabled by default
+- `telemetry`, optional and disabled by default
 
 Then run:
 
@@ -170,6 +171,27 @@ kvoptbench result-package \
   --config examples/vllm_openai_compatible_config.yaml \
   --output-dir results/packages/real_endpoint_smoke
 ```
+
+### Live Telemetry
+
+Set `telemetry.enabled: true` when the backend exposes useful runtime metrics.
+KVOptBench writes run-level telemetry artifacts separately from request rows:
+
+```text
+results/telemetry/<run_id>/telemetry_snapshots.jsonl
+results/telemetry/<run_id>/telemetry_summary.json
+```
+
+Supported telemetry sources:
+
+- Prometheus-compatible endpoints, such as vLLM `/metrics`.
+- live `nvidia-smi` GPU memory sampling.
+- LMCache Prometheus metrics or structured JSON/JSONL exports.
+
+Request JSONL rows keep lightweight references to these artifacts and copy
+available run-level fields such as `gpu_memory_peak_gb` and cache hit rate into
+the normal metric/provenance flow. Unavailable telemetry remains null and is
+listed in `missing_metrics`.
 
 ### Reasoning and Tool-Calling Models
 
@@ -218,7 +240,9 @@ The reusable Python helpers for these foundations are available in:
 
 - `kvoptbench.runner.schedule` for deterministic repeated-run schedules.
 - `kvoptbench.analysis.statistics` for repeated-trial aggregation and percent-delta comparisons.
-- `kvoptbench.telemetry.prometheus` and `kvoptbench.telemetry.nvidia_smi` for offline telemetry parsing.
+- `kvoptbench.telemetry.runtime` for before/during/after run telemetry collection.
+- `kvoptbench.telemetry.prometheus`, `kvoptbench.telemetry.nvidia_smi`, and
+  `kvoptbench.telemetry.lmcache` for telemetry normalization.
 - `kvoptbench.importers.vllm_bench` for importing vLLM bench artifacts into KVOptBench-like rows.
 
 ## Real/Public Dataset Packs
@@ -330,10 +354,11 @@ kvoptbench result-package \
   --output-dir results/packages/mock_public_example
 ```
 
-`result-package` writes `run_manifest.json`, `missing_metrics.json`, `README_result.md`,
-artifact hashes, JSONL samples when raw/workload files are provided, copied dataset manifests,
-and redacted config snapshots. Treat the generated bundle as local output until you have checked
-dataset rights, private prompt exposure, and endpoint metadata.
+`result-package` writes `run_manifest.json`, `missing_metrics.json`, `metric_provenance.json`,
+`README_result.md`, artifact hashes, JSONL samples when raw/workload files are provided,
+copied telemetry artifacts referenced by raw rows, copied dataset manifests, and redacted
+config snapshots. Treat the generated bundle as local output until you have checked dataset
+rights, private prompt exposure, and endpoint metadata.
 
 ## Guides
 

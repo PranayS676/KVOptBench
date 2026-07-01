@@ -251,6 +251,92 @@ def test_runner_records_configured_environment_metadata(monkeypatch, tmp_path: P
     assert result.metric_provenance["gpu_type"].available is True
 
 
+def test_runner_wires_live_gpu_telemetry_into_rows(monkeypatch, tmp_path: Path) -> None:
+    workload_file = tmp_path / "workload.jsonl"
+    output_file = tmp_path / "results.jsonl"
+    telemetry_dir = tmp_path / "telemetry"
+    config_file = tmp_path / "config.yaml"
+    item = WorkloadItem(
+        task_id="telemetry-1",
+        workload="decode_heavy",
+        category="decode",
+        prompt="Return endpoint-ok",
+        expected_answer="endpoint-ok",
+        target_input_tokens=32,
+        target_output_tokens=16,
+    )
+    workload_file.write_text(json.dumps(item.model_dump()) + "\n", encoding="utf-8")
+    config_file.write_text(
+        "\n".join(
+            [
+                "experiment_id: telemetry_runner_test",
+                "official_run: false",
+                "provider: local",
+                "engine: vllm",
+                "endpoint_type: vllm",
+                "model_id: example/model",
+                "strategy: baseline",
+                "base_url: http://testserver/v1",
+                f"workload_file: {workload_file.as_posix()}",
+                f"output_file: {output_file.as_posix()}",
+                "concurrency: 1",
+                "max_tasks: 1",
+                "telemetry:",
+                "  enabled: true",
+                f"  output_dir: {telemetry_dir.as_posix()}",
+                "  gpu:",
+                "    enabled: true",
+                "    sample_interval_seconds: null",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeClient:
+        def __init__(self, config):
+            self.config = config
+
+        async def healthcheck(self) -> EndpointHealth:
+            return EndpointHealth(ok=True, url="http://testserver/v1/models")
+
+        async def chat(self, item: WorkloadItem) -> TimedResponse:
+            return TimedResponse(
+                content="endpoint-ok",
+                input_tokens=8,
+                output_tokens=2,
+                provider_completion_tokens=2,
+                ttft_ms=10.0,
+                tpot_ms=5.0,
+                itl_ms=5.0,
+                e2e_latency_ms=20.0,
+                success=True,
+            )
+
+    samples = iter(
+        [
+            "memory.used [MiB], memory.total [MiB]\n1024 MiB, 24576 MiB\n",
+            "memory.used [MiB], memory.total [MiB]\n2048 MiB, 24576 MiB\n",
+        ]
+    )
+    monkeypatch.setattr("kvoptbench.runner.experiment.OpenAICompatClient", FakeClient)
+    monkeypatch.setattr(
+        "kvoptbench.telemetry.nvidia_smi.nvidia_smi_sample_provider",
+        lambda: next(samples),
+    )
+
+    asyncio.run(run_experiment(config_file))
+
+    row = json.loads(output_file.read_text(encoding="utf-8").strip())
+    result = RequestResult.model_validate(row)
+    assert result.gpu_memory_used_gb == 2.0
+    assert result.gpu_memory_peak_gb == 2.0
+    assert "gpu_memory_peak_gb" not in result.missing_metrics
+    assert result.metric_provenance["gpu_memory_peak_gb"].available is True
+    assert result.telemetry_summary_path is not None
+    assert Path(result.telemetry_summary_path).exists()
+    assert Path(result.telemetry_snapshots_path or "").exists()
+
+
 def test_request_result_accepts_metric_provenance_and_environment_snapshot() -> None:
     result = RequestResult(
         run_id="run",

@@ -60,6 +60,8 @@ def test_compare_kv_offload_results_computes_deltas_and_interpretation(tmp_path)
     assert by_bucket[32768]["memory_delta_pct"] == -41.667
     assert by_bucket[32768]["quality_delta"] == -0.01
     assert by_bucket[32768]["offload_interpretation"] == "offload_promising"
+    assert "baseline_ttft_ms_stats_status" in frame.columns
+    assert "ttft_ms_effect_size" in frame.columns
     assert by_bucket[65536]["offload_interpretation"] == "latency_regression"
 
 

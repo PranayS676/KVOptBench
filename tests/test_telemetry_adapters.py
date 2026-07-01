@@ -3,6 +3,7 @@ from pathlib import Path
 import httpx
 
 from kvoptbench.runner.environment import capture_backend_environment
+from kvoptbench.telemetry.lmcache import normalize_lmcache_metrics, parse_lmcache_jsonl
 from kvoptbench.telemetry.nvidia_smi import GpuSampler, normalize_gpu_metrics
 from kvoptbench.telemetry.prometheus import parse_prometheus_samples, scrape_prometheus_endpoint
 
@@ -179,6 +180,56 @@ def test_gpu_sampler_preserves_unavailable_reasons_from_provider_failure() -> No
     ]
     assert "returned no sample" in snapshot.missing_metrics[0].reason
     assert "No GPU telemetry samples" in final_snapshot.missing_metrics[-1].reason
+
+
+def test_lmcache_prometheus_normalization_aliases_cache_metrics() -> None:
+    text = """
+lmcache_cache_hit_total 8
+lmcache_cache_miss_total 2
+lmcache_kv_transfer_bytes_total 4096
+"""
+
+    snapshot = normalize_lmcache_metrics(
+        text,
+        expected_metrics=[
+            "lmcache_cache_hits",
+            "lmcache_cache_misses",
+            "lmcache_cache_hit_rate",
+            "lmcache_kv_transfer_bytes",
+        ],
+    )
+
+    assert snapshot.metrics["lmcache_cache_hits"] == 8.0
+    assert snapshot.metrics["lmcache_cache_misses"] == 2.0
+    assert snapshot.metrics["lmcache_cache_hit_rate"] == 0.8
+    assert snapshot.metrics["lmcache_kv_transfer_bytes"] == 4096.0
+    assert snapshot.missing_metrics == []
+
+
+def test_lmcache_jsonl_import_preserves_missing_metrics(tmp_path: Path) -> None:
+    source = tmp_path / "lmcache.jsonl"
+    source.write_text(
+        "\n".join(
+            [
+                '{"metric": "cache_hit", "value": 3}',
+                '{"name": "cache_miss", "value": 1}',
+                '{"name": "custom_metric", "value": 12}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    snapshot = parse_lmcache_jsonl(
+        source,
+        expected_metrics=["lmcache_cache_hit_rate", "lmcache_cache_loads"],
+    )
+
+    assert snapshot.metrics["lmcache_cache_hit_rate"] == 0.75
+    assert snapshot.metrics["custom_metric"] == 12.0
+    assert [missing.metric for missing in snapshot.missing_metrics] == [
+        "lmcache_cache_loads"
+    ]
 
 
 def test_backend_environment_helper_sanitizes_and_reports_missing_fields() -> None:

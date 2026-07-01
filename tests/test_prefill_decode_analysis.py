@@ -56,6 +56,8 @@ def test_compare_prefill_decode_results_classifies_bottlenecks(tmp_path) -> None
     assert by_expected["mixed"]["bottleneck_classification"] == "mixed"
     assert by_expected["prefill_bound"]["ttft_ms_p50"] == 900.0
     assert by_expected["decode_bound"]["tpot_ms_mean"] == 65.0
+    assert "ttft_ms_stats_status" in frame.columns
+    assert "ttft_ms_effect_size_vs_baseline" in frame.columns
 
 
 def test_compare_prefill_decode_results_keeps_unavailable_metrics_null(tmp_path) -> None:
