@@ -26,9 +26,10 @@ def test_longbench_adapter_prepares_local_fixture(tmp_path: Path) -> None:
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
 
     assert result.row_count == 1
-    assert items[0].eval_type == "contains_expected"
+    assert items[0].eval_type == "longbench_answer"
     assert items[0].expected_answer == "time to first token"
     assert items[0].metadata["subset"] == "qasper"
+    assert items[0].metadata["evaluator"] == "longbench_answer"
     assert manifest["adapter_name"] == "longbench"
     assert manifest["license_review_status"] == "fixture_only"
 

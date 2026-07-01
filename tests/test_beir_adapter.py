@@ -28,8 +28,9 @@ def test_beir_scifact_adapter_prepares_rag_fixture(tmp_path: Path) -> None:
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
 
     assert result.row_count == 1
-    assert items[0].eval_type == "rag_placeholder"
+    assert items[0].eval_type == "rag_source_match"
     assert items[0].expected_answer == "doc-1"
+    assert items[0].metadata["expected_source_ids"] == ["doc-1"]
     assert "Source doc-1" in items[0].prompt
     assert manifest["adapter_name"] == "beir_scifact"
 

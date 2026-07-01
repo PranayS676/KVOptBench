@@ -242,6 +242,18 @@ separate channels in the JSONL results.
 - Tool-call workloads can pass OpenAI-compatible `tools` and `tool_choice` through workload metadata.
   KVOptBench validates tool name and arguments; it does not execute external tools.
 
+### Quality Evaluators
+
+KVOptBench records task quality fields next to latency and cache metrics. Current
+local evaluators include:
+
+- `qasper_answer` and `longbench_answer` for exact/contains/token-F1 answer scoring.
+- `rag_source_match` for answer plus expected source/document ID coverage.
+- `bfcl_tool_call` for function name, argument JSON, and required argument fields.
+- `json_validity` and `json_schema` for structured output checks.
+- `needle`, `exact_match`, and `contains_expected` for deterministic known-answer tasks.
+- `llm_judge_placeholder`, which remains local-only and does not call an external judge.
+
 ## Strategy Experiments
 
 The CLI can generate config plans and comparison CSVs for common inference-strategy tests:
