@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+from importlib import resources
 from pathlib import Path
 from typing import Any, Literal
 
 import pandas as pd
+import yaml
 from pydantic import BaseModel, Field
 
 from kvoptbench.schemas import utc_now_iso
@@ -78,6 +80,7 @@ class StrategyRecommendation(BaseModel):
     missing_required_metrics: list[str] = Field(default_factory=list)
     missing_recommended_metrics: list[str] = Field(default_factory=list)
     quality_guardrail: str | None = None
+    reason_codes: list[str] = Field(default_factory=list)
     source: str
 
 
@@ -255,9 +258,41 @@ QUALITY_EVALUATOR_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 
+def load_workload_thresholds(
+    advisor_config_path: str | Path | None = None,
+) -> dict[str, WorkloadThreshold]:
+    """Load workload-aware advisor thresholds from YAML."""
+    if advisor_config_path is None:
+        try:
+            with resources.files("kvoptbench.strategy").joinpath(
+                "default_advisor_thresholds.yaml"
+            ).open("r", encoding="utf-8") as handle:
+                payload = yaml.safe_load(handle)
+        except (FileNotFoundError, ModuleNotFoundError):
+            return dict(WORKLOAD_THRESHOLDS)
+    else:
+        payload = yaml.safe_load(Path(advisor_config_path).read_text(encoding="utf-8"))
+
+    if not isinstance(payload, dict):
+        raise ValueError("Advisor config must be a YAML mapping")
+    raw_thresholds = payload.get("workload_thresholds", payload)
+    if not isinstance(raw_thresholds, dict):
+        raise ValueError("Advisor config workload_thresholds must be a mapping")
+
+    thresholds = dict(WORKLOAD_THRESHOLDS)
+    for key, raw_value in raw_thresholds.items():
+        if not isinstance(raw_value, dict):
+            raise ValueError(f"Workload threshold '{key}' must be a mapping")
+        threshold = WorkloadThreshold.model_validate(raw_value)
+        thresholds[str(key)] = threshold
+        thresholds[threshold.workload_profile] = threshold
+    return thresholds
+
+
 def build_strategy_advisor_report(
     *,
     summary_path: str | Path,
+    advisor_config_path: str | Path | None = None,
     cache_input_path: str | Path | None = None,
     prefix_sweep_input_path: str | Path | None = None,
     prefill_decode_input_path: str | Path | None = None,
@@ -268,6 +303,7 @@ def build_strategy_advisor_report(
     disagg_input_path: str | Path | None = None,
 ) -> StrategyAdvisorReport:
     """Build a deterministic recommendation report from available CSV outputs."""
+    workload_thresholds = load_workload_thresholds(advisor_config_path)
     inputs = StrategyAdvisorInputs(
         summary_path=Path(summary_path),
         cache_input_path=_optional_path(cache_input_path),
@@ -295,26 +331,31 @@ def build_strategy_advisor_report(
             evaluate_prefix_caching(frames["cache"], frames["prefix_sweep"]),
             evidence_frames=[frames["cache"], frames["prefix_sweep"]],
             summary_frame=summary,
+            workload_thresholds=workload_thresholds,
         ),
         _apply_confidence_model(
             evaluate_kv_quantization(frames["kv_quant"]),
             evidence_frames=[frames["kv_quant"]],
             summary_frame=summary,
+            workload_thresholds=workload_thresholds,
         ),
         _apply_confidence_model(
             evaluate_kv_offload(frames["kv_offload"]),
             evidence_frames=[frames["kv_offload"]],
             summary_frame=summary,
+            workload_thresholds=workload_thresholds,
         ),
         _apply_confidence_model(
             evaluate_speculative_decoding(frames["spec_decoding"]),
             evidence_frames=[frames["spec_decoding"]],
             summary_frame=summary,
+            workload_thresholds=workload_thresholds,
         ),
         _apply_confidence_model(
             evaluate_disaggregation(frames["disagg"]),
             evidence_frames=[frames["disagg"]],
             summary_frame=summary,
+            workload_thresholds=workload_thresholds,
         ),
     ]
     recommendations.extend(
@@ -322,6 +363,7 @@ def build_strategy_advisor_report(
             item,
             evidence_frames=[frames["long_context"]],
             summary_frame=summary,
+            workload_thresholds=workload_thresholds,
         )
         for item in evaluate_long_context_next_steps(frames["long_context"], summary)
     )
@@ -798,6 +840,7 @@ def _apply_confidence_model(
     *,
     evidence_frames: list[pd.DataFrame | None],
     summary_frame: pd.DataFrame,
+    workload_thresholds: dict[str, WorkloadThreshold],
 ) -> StrategyRecommendation:
     """Add transparent confidence scoring without changing legacy fields."""
     evidence_rows = _frame_rows(evidence_frames)
@@ -807,6 +850,7 @@ def _apply_confidence_model(
     score = _base_confidence_score(recommendation)
     reasons: list[str] = []
     priority: list[str] = []
+    reason_codes: list[str] = []
 
     metric_evidence_count = sum(1 for item in recommendation.evidence if item.metric)
     if metric_evidence_count:
@@ -817,6 +861,7 @@ def _apply_confidence_model(
         reasons.append(
             "Evidence completeness is limited: no metric-backed evidence items were available."
         )
+        _append_unique(reason_codes, "missing_metric_evidence")
         score -= 0.20
         _append_unique(
             priority,
@@ -831,6 +876,7 @@ def _apply_confidence_model(
         reasons.append(
             "missing telemetry lowers confidence: " + ", ".join(missing_metrics) + "."
         )
+        _append_unique(reason_codes, "missing_telemetry")
         for next_experiment in _missing_metric_next_experiments(missing_metrics):
             _append_unique(priority, next_experiment)
     else:
@@ -841,8 +887,10 @@ def _apply_confidence_model(
         sample_count = _sample_support_count(summary_rows)
     if sample_count is None:
         reasons.append("Sample support: no request/sample count column was available.")
+        _append_unique(reason_codes, "sample_support_unknown")
     elif sample_count < TINY_SAMPLE_SUPPORT:
         score -= 0.25
+        _append_unique(reason_codes, "tiny_sample_support")
         reasons.append(
             f"Tiny sample support: only {sample_count} requests/trials were reported."
         )
@@ -853,18 +901,28 @@ def _apply_confidence_model(
     else:
         reasons.append(f"Sample support: {sample_count} requests/trials were reported.")
 
-    score = _apply_quality_guardrail(recommendation, evidence_rows, reasons, priority, score)
+    score = _apply_quality_guardrail(
+        recommendation,
+        evidence_rows,
+        reasons,
+        priority,
+        reason_codes,
+        score,
+    )
     score = _apply_workload_thresholds(
         recommendation,
         evidence_rows=evidence_rows,
         summary_rows=summary_rows,
         reasons=reasons,
         priority=priority,
+        reason_codes=reason_codes,
+        workload_thresholds=workload_thresholds,
         score=score,
     )
 
     if _has_mock_source(context_rows):
         score -= 0.05
+        _append_unique(reason_codes, "mock_source")
         _append_unique(
             recommendation.caveats,
             "mock source data validates benchmark wiring only; it is not real engine validation.",
@@ -879,10 +937,24 @@ def _apply_confidence_model(
     elif _has_source_signal(context_rows):
         reasons.append("Source type: no mock source fields were detected.")
 
+    if not _has_randomization_signal(context_rows):
+        score -= 0.05
+        _append_unique(reason_codes, "no_randomization")
+        reasons.append(
+            "Execution order: no randomized-order evidence was detected; ordering effects may remain."
+        )
+        _append_unique(
+            priority,
+            "Use strategy-run --randomize --block-randomization for follow-up comparisons.",
+        )
+    else:
+        reasons.append("Execution order: randomized-order evidence was detected.")
+
     if recommendation.strategy == "prefix_caching" and any(
         "No prefix-overlap sweep CSV" in caveat for caveat in recommendation.caveats
     ):
         score -= 0.15
+        _append_unique(reason_codes, "missing_prefix_sweep")
         reasons.append("Prefix sweep evidence is missing, so the cache threshold is unknown.")
         _append_unique(
             priority,
@@ -892,8 +964,9 @@ def _apply_confidence_model(
     recommendation.confidence_score = _clamp_score(score)
     recommendation.confidence = _confidence_from_score(recommendation.confidence_score)
     recommendation.confidence_reasons = reasons
+    recommendation.reason_codes = reason_codes
     recommendation.next_experiment_priority = priority
-    _ensure_next_experiment_plan(recommendation)
+    _ensure_next_experiment_plan(recommendation, workload_thresholds)
     return recommendation
 
 
@@ -910,6 +983,8 @@ def _apply_workload_thresholds(
     summary_rows: list[pd.Series],
     reasons: list[str],
     priority: list[str],
+    reason_codes: list[str],
+    workload_thresholds: dict[str, WorkloadThreshold],
     score: float,
 ) -> float:
     """Apply workload-profile evidence gates while preserving strategy decisions."""
@@ -917,7 +992,9 @@ def _apply_workload_thresholds(
     if profile is None:
         return score
 
-    threshold = WORKLOAD_THRESHOLDS[profile]
+    threshold = workload_thresholds.get(profile)
+    if threshold is None:
+        return score
     recommendation.workload_profile = profile
     recommendation.workload_threshold = threshold
     context_rows = [*evidence_rows, *summary_rows]
@@ -929,6 +1006,7 @@ def _apply_workload_thresholds(
 
     if missing_required:
         score -= min(0.05 * len(missing_required), 0.25)
+        _append_unique(reason_codes, "missing_required_metrics")
         reasons.append(
             "Workload threshold missing required metrics for "
             f"{profile}: {', '.join(missing_required)}."
@@ -942,6 +1020,7 @@ def _apply_workload_thresholds(
 
     if missing_recommended:
         score -= min(0.02 * len(missing_recommended), 0.10)
+        _append_unique(reason_codes, "missing_recommended_metrics")
         reasons.append(
             "Workload threshold missing recommended metrics for "
             f"{profile}: {', '.join(missing_recommended)}."
@@ -950,12 +1029,14 @@ def _apply_workload_thresholds(
     threshold_sample_count = _sample_support_count(context_rows)
     if threshold_sample_count is None:
         score -= 0.08
+        _append_unique(reason_codes, "threshold_sample_support_unknown")
         reasons.append(
             f"Workload threshold sample support is unknown for {profile}; "
             f"target at least {threshold.minimum_samples} samples."
         )
     elif threshold_sample_count < threshold.minimum_samples:
         score -= 0.12
+        _append_unique(reason_codes, "threshold_sample_support_below_target")
         reasons.append(
             f"Workload threshold sample support is below target for {profile}: "
             f"{threshold_sample_count} observed, {threshold.minimum_samples} target."
@@ -974,12 +1055,14 @@ def _apply_workload_thresholds(
     repeated_trials = _trial_support_count(context_rows)
     if repeated_trials is None:
         score -= 0.04
+        _append_unique(reason_codes, "repeated_trial_support_unknown")
         reasons.append(
             f"Repeated-trial support is unknown for {profile}; "
             f"target at least {threshold.minimum_repeated_trials} trials."
         )
     elif repeated_trials < threshold.minimum_repeated_trials:
         score -= 0.08
+        _append_unique(reason_codes, "repeated_trial_support_below_target")
         reasons.append(
             f"Repeated-trial support is below target for {profile}: "
             f"{repeated_trials} observed, {threshold.minimum_repeated_trials} target."
@@ -994,6 +1077,7 @@ def _apply_workload_thresholds(
     recommendation.quality_gate_status = gate_status
     if gate_status == "fail":
         score -= 0.35
+        _append_unique(reason_codes, "quality_gate_failed")
         _append_unique(
             recommendation.caveats,
             f"{profile} quality gate failed; do not promote performance-only wins.",
@@ -1007,6 +1091,7 @@ def _apply_workload_thresholds(
             recommendation.score = min(recommendation.score, -2.0)
     elif gate_status == "unknown":
         score -= 0.12
+        _append_unique(reason_codes, "quality_gate_unknown")
         _append_unique(
             recommendation.caveats,
             f"{profile} quality gate is unknown; required evaluator evidence is missing.",
@@ -1022,6 +1107,7 @@ def _apply_workload_thresholds(
             recommendation.decision = "consider"
     elif gate_status == "warn":
         score -= 0.06
+        _append_unique(reason_codes, "quality_gate_warn")
         reasons.append(f"Workload quality gate has partial coverage for {profile}.")
         _append_unique(
             priority,
@@ -1247,13 +1333,16 @@ def _split_signal_values(value) -> list[str]:
     return [item.strip() for item in normalized.split(";") if item.strip()]
 
 
-def _ensure_next_experiment_plan(recommendation: StrategyRecommendation) -> None:
+def _ensure_next_experiment_plan(
+    recommendation: StrategyRecommendation,
+    workload_thresholds: dict[str, WorkloadThreshold],
+) -> None:
     if recommendation.decision not in {"inconclusive", "needs_more_data"}:
         return
     if recommendation.next_experiment_plans:
         return
 
-    threshold = recommendation.workload_threshold or WORKLOAD_THRESHOLDS["long_context_qa"]
+    threshold = recommendation.workload_threshold or workload_thresholds["long_context_qa"]
     reason = _next_experiment_reason(recommendation)
     plan = _build_next_experiment_plan(recommendation, threshold, reason)
     recommendation.next_experiment_plans.append(plan)
@@ -1392,6 +1481,7 @@ def _apply_quality_guardrail(
     rows: list[pd.Series],
     reasons: list[str],
     priority: list[str],
+    reason_codes: list[str],
     score: float,
 ) -> float:
     if recommendation.strategy not in {
@@ -1409,6 +1499,7 @@ def _apply_quality_guardrail(
         recommendation.quality_guardrail = "unknown"
         if recommendation.decision in {"recommend", "consider"}:
             score -= 0.20
+            _append_unique(reason_codes, "quality_guardrail_unknown")
             reasons.append(
                 "Quality guardrail is unknown because quality_delta telemetry is missing."
             )
@@ -1420,6 +1511,7 @@ def _apply_quality_guardrail(
 
     if quality_delta < QUALITY_REGRESSION_THRESHOLD:
         recommendation.quality_guardrail = "failed"
+        _append_unique(reason_codes, "quality_guardrail_failed")
         reasons.append(
             "Failed quality guardrail: quality delta "
             f"{_fmt_metric(quality_delta)} is below {_fmt_metric(QUALITY_REGRESSION_THRESHOLD)}."
@@ -1499,6 +1591,28 @@ def _has_source_signal(rows: list[pd.Series]) -> bool:
     for row in rows:
         if any(column in row and _clean_string(row.get(column)) for column in source_columns):
             return True
+    return False
+
+
+def _has_randomization_signal(rows: list[pd.Series]) -> bool:
+    randomization_columns = (
+        "randomized_order",
+        "randomize",
+        "block_randomization",
+        "randomized_condition_order",
+    )
+    for row in rows:
+        for column in randomization_columns:
+            if column not in row.index:
+                continue
+            value = row.get(column)
+            if isinstance(value, bool):
+                if value:
+                    return True
+                continue
+            cleaned = _clean_string(value).lower()
+            if cleaned in {"true", "1", "yes", "randomized", "block_randomized"}:
+                return True
     return False
 
 

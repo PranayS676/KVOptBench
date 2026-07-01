@@ -51,6 +51,8 @@ def test_strategy_advisor_recommends_prefix_caching_with_threshold_evidence(tmp_
     recommendation = _by_strategy(report, "prefix_caching")
     assert recommendation.decision == "recommend"
     assert recommendation.confidence == "low"
+    assert "mock_source" in recommendation.reason_codes
+    assert "no_randomization" in recommendation.reason_codes
     assert recommendation.rank == 1
     assert recommendation.workload_profile == "long_context_qa"
     assert recommendation.quality_gate_status in {"warn", "unknown"}
@@ -209,6 +211,7 @@ def test_strategy_advisor_downgrades_confidence_for_tiny_sample_support(
     assert recommendation.decision == "recommend"
     assert recommendation.confidence == "low"
     assert recommendation.confidence_score < 0.8
+    assert "tiny_sample_support" in recommendation.reason_codes
     assert any("sample support" in reason for reason in recommendation.confidence_reasons)
     assert any("Repeat trials" in item for item in recommendation.next_experiment_priority)
 
@@ -247,6 +250,7 @@ def test_strategy_advisor_quality_guardrail_overrides_promising_interpretation(
     recommendation = _by_strategy(report, "speculative_decoding")
     assert recommendation.decision == "do_not_recommend"
     assert recommendation.quality_guardrail == "failed"
+    assert "quality_guardrail_failed" in recommendation.reason_codes
     assert any("quality guardrail" in reason for reason in recommendation.confidence_reasons)
     assert any("quality-sensitive" in item for item in recommendation.next_experiment_priority)
 
@@ -297,6 +301,7 @@ def test_strategy_advisor_marks_mock_source_without_real_engine_claims(tmp_path:
 
     recommendation = _by_strategy(report, "prefix_caching")
     assert recommendation.decision == "recommend"
+    assert "mock_source" in recommendation.reason_codes
     assert any("mock" in caveat and "real engine" in caveat for caveat in recommendation.caveats)
     assert any("mock source" in reason for reason in recommendation.confidence_reasons)
 
@@ -426,6 +431,64 @@ def test_strategy_advisor_inconclusive_recommendations_include_command_plans(
         "output_tokens",
     ]
     assert any(item.startswith("Command template: kvoptbench") for item in recommendation.next_experiments)
+
+
+def test_strategy_advisor_loads_workload_thresholds_from_yaml(tmp_path: Path) -> None:
+    summary = _write_summary(tmp_path, provider="local", requests=20)
+    config = tmp_path / "advisor_thresholds.yaml"
+    config.write_text(
+        """
+workload_thresholds:
+  long_context_qa:
+    workload_profile: long_context_qa
+    primary_focus: custom long context policy
+    minimum_samples: 99
+    minimum_repeated_trials: 5
+    required_quality_evaluators:
+      - answer_correctness
+    required_metrics:
+      - ttft_ms
+    recommended_metrics:
+      - gpu_memory_peak_gb
+    threshold_posture: custom strict policy
+    blocking_quality_regression: true
+""",
+        encoding="utf-8",
+    )
+    cache = tmp_path / "cache_summary.csv"
+    pd.DataFrame(
+        [
+            {
+                "provider": "local",
+                "engine": "vllm",
+                "model_id": "model",
+                "strategy": "cache_on",
+                "workload": "shared_prefix_long_doc",
+                "shared_cold_ttft_ms": 320.0,
+                "shared_warm_ttft_ms": 110.0,
+                "random_cache_miss_penalty_ms": 15.0,
+                "control_adjusted_cache_gain_ms": 195.0,
+                "shared_prefix_tokens": 12000,
+                "requests": 20,
+                "randomized_order": True,
+                "quality_method": "qasper_answer",
+                "ttft_ms": 100.0,
+                "interpretation": "credible_cache_reuse_signal",
+            }
+        ]
+    ).to_csv(cache, index=False)
+
+    report = build_strategy_advisor_report(
+        summary_path=summary,
+        cache_input_path=cache,
+        advisor_config_path=config,
+    )
+
+    recommendation = _by_strategy(report, "prefix_caching")
+    assert recommendation.workload_threshold is not None
+    assert recommendation.workload_threshold.minimum_samples == 99
+    assert "threshold_sample_support_below_target" in recommendation.reason_codes
+    assert any("99 target" in reason for reason in recommendation.confidence_reasons)
 
 
 def test_strategy_advisor_markdown_renders_confidence_rationale(tmp_path: Path) -> None:

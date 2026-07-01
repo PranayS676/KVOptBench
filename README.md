@@ -172,6 +172,17 @@ be excluded before aggregation, optional IQR outlier filtering is available thro
 the statistics helpers, and `strategy-run --block-randomization` randomizes each
 repeat block without mixing repeats together.
 
+Advisor workload thresholds are YAML-tunable. Start from
+`kvoptbench/strategy/default_advisor_thresholds.yaml`, edit sample minimums,
+required metrics, or evaluator coverage, then run:
+
+```bash
+kvoptbench strategy-recommend \
+  --summary results/summary.csv \
+  --advisor-config path/to/advisor_thresholds.yaml \
+  --json-output results/strategy_advisor.json
+```
+
 ## Bring Your Own Endpoint
 
 KVOptBench expects a running OpenAI-compatible HTTP endpoint. The endpoint can be local or remote.
