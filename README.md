@@ -161,6 +161,7 @@ strategy-advisor output, dataset manifests, and result-package manifests under
 kvoptbench schema export --output-dir schemas/v1 --check
 kvoptbench validate-results --input results/raw
 kvoptbench validate-package --path results/packages/golden
+kvoptbench release-check
 ```
 
 ## Benchmark Methodology
