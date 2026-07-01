@@ -30,6 +30,26 @@ Every important metric should eventually expose:
 
 Use `metric_provenance` in result packages and reports to group this information.
 
+## Current Result Fields
+
+Request-level JSONL rows include:
+
+- `metric_provenance`: per-metric source labels, measurement methods, availability,
+  units, provider fields when applicable, and missing reasons.
+- `environment`: a reproducibility snapshot with Python version, platform, KVOptBench
+  version, git commit, branch, dirty-state flag, and selected package versions.
+
+Summary CSVs include compact provenance columns:
+
+- `metric_provenance`: grouped JSON summary by metric.
+- `metric_source_types`: readable `metric:source_type` pairs.
+- `unavailable_metric_reasons`: readable missing-reason pairs.
+
+Result packages include `metric_provenance.json` in addition to
+`missing_metrics.json`. Use `missing_metrics.json` to see what was unavailable,
+and use `metric_provenance.json` to see whether available values were observed,
+provider-reported, engine-reported, GPU-reported, imported, derived, or estimated.
+
 ## Token Count Provenance
 
 Token counts are especially easy to misread. KVOptBench should keep these fields
@@ -105,6 +125,11 @@ GenAI-Perf, AIPerf, or other profiler outputs. Imported metrics should preserve:
 
 Imported evidence should be usable by summaries and the strategy advisor, but it
 should remain auditable.
+
+KVOptBench includes an initial vLLM bench importer that maps local JSON, JSONL,
+or CSV artifacts into KVOptBench-like rows. Imported rows preserve unavailable
+fields as null, list missing metrics, and keep the original field names in
+metadata without embedding absolute local paths.
 
 ## Advisor Confidence
 

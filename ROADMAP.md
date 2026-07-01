@@ -126,6 +126,18 @@
 - Real endpoint telemetry expectations for Prometheus and GPU memory capture
 - Result template fields for run order, repetitions, effect size, advisor confidence, and metric provenance
 
+## Done: Non-GPU Evidence Foundations
+
+- Request-level metric provenance schema and runner population
+- Environment snapshots for reproducible result rows
+- Summary and report sections for metric source types and unavailable metric reasons
+- Result package `metric_provenance.json`
+- Deterministic repeated-run scheduling helpers
+- Repeated-trial statistical aggregation and comparison helpers
+- Offline Prometheus, DCGM, and `nvidia-smi` telemetry parsing foundations
+- vLLM bench import foundations
+- Strategy advisor confidence rationale, quality guardrails, and prioritized next experiments
+
 ## Next: Real Endpoint Result Collection
 
 - First public cache run on one real vLLM or SGLang endpoint

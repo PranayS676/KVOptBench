@@ -11,6 +11,12 @@ from pathlib import Path
 from kvoptbench.client.openai_compat import OpenAICompatClient
 from kvoptbench.config import load_config
 from kvoptbench.evals.dispatch import evaluate_output
+from kvoptbench.runner.environment import capture_environment
+from kvoptbench.runner.provenance import (
+    build_metric_provenance,
+    healthcheck_failure_provenance,
+    mark_requests_per_second_available,
+)
 from kvoptbench.schemas import EndpointHealth, RequestResult, WorkloadItem
 
 
@@ -38,6 +44,7 @@ async def run_experiment(config_path: str | Path) -> Path:
     run_id = f"{int(time.time())}-{config.experiment_id}"
     client = OpenAICompatClient(config)
     endpoint_health = await client.healthcheck()
+    environment = capture_environment(Path.cwd())
     if not endpoint_health.ok:
         results = [
             _failed_healthcheck_result(
@@ -45,6 +52,7 @@ async def run_experiment(config_path: str | Path) -> Path:
                 item=item,
                 config=config,
                 endpoint_health=endpoint_health,
+                environment=environment,
             )
             for item in items
         ]
@@ -69,6 +77,13 @@ async def run_experiment(config_path: str | Path) -> Path:
         input_tps = response.input_tokens / e2e_seconds if e2e_seconds > 0 else None
         metadata = response.response_metadata
         missing_metrics = _missing_metrics(response, metadata)
+        metric_provenance = build_metric_provenance(
+            response=response,
+            metadata=metadata,
+            missing_metrics=missing_metrics,
+            output_tps_available=output_tps is not None,
+            input_tps_available=input_tps is not None,
+        )
         return RequestResult(
             run_id=run_id,
             experiment_id=config.experiment_id,
@@ -112,6 +127,8 @@ async def run_experiment(config_path: str | Path) -> Path:
             quality_method=quality.quality_method if quality else None,
             token_count_method=response.token_count_method,
             missing_metrics=missing_metrics,
+            metric_provenance=metric_provenance,
+            environment=environment,
             metadata={
                 "config_metadata": config.metadata,
                 "workload_metadata": item.metadata,
@@ -139,6 +156,9 @@ def _write_results(
         for result in results:
             if requests_per_second is not None:
                 result.requests_per_second = round(requests_per_second, 3)
+                result.metric_provenance = mark_requests_per_second_available(
+                    result.metric_provenance
+                )
             handle.write(json.dumps(result.model_dump(), ensure_ascii=False) + "\n")
 
 
@@ -148,6 +168,7 @@ def _failed_healthcheck_result(
     item: WorkloadItem,
     config,
     endpoint_health: EndpointHealth,
+    environment,
 ) -> RequestResult:
     return RequestResult(
         run_id=run_id,
@@ -180,6 +201,8 @@ def _failed_healthcheck_result(
             "cache_hit_rate",
             "cache_miss_penalty_ms",
         ],
+        metric_provenance=healthcheck_failure_provenance(),
+        environment=environment,
         metadata={
             "config_metadata": config.metadata,
             "workload_metadata": item.metadata,

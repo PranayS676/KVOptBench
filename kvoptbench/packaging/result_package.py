@@ -55,6 +55,7 @@ class ResultPackageManifest(BaseModel):
     workload_provenance: list[dict[str, Any]]
     dataset_provenance: list[dict[str, Any]]
     missing_metrics: list[MissingMetricEntry]
+    metric_provenance: dict[str, Any]
     limitations: list[str]
     reproduction_notes: list[str]
 
@@ -65,6 +66,7 @@ class ResultPackageBuild(BaseModel):
     output_dir: Path
     manifest_path: Path
     missing_metrics_path: Path
+    metric_provenance_path: Path
     readme_path: Path
     artifact_count: int
 
@@ -160,10 +162,12 @@ def build_result_package(
 
     missing_metrics = _collect_missing_metrics(summary_rows, raw_files)
     missing_metric_entries = [MissingMetricEntry(metric=name) for name in missing_metrics]
+    metric_provenance = _collect_metric_provenance(summary_rows, raw_files)
 
     limitations = [
         "Do not publish mock metrics as real endpoint results.",
         "Unavailable engine metrics are preserved as null and listed in missing_metrics.json.",
+        "Metric sources are documented in metric_provenance.json.",
         "Redacted config snapshots omit endpoint URLs and secret-bearing values.",
     ]
     reproduction_notes = [
@@ -180,6 +184,7 @@ def build_result_package(
         workload_provenance=workload_provenance,
         dataset_provenance=dataset_provenance,
         missing_metrics=missing_metric_entries,
+        metric_provenance=metric_provenance,
         limitations=limitations,
         reproduction_notes=reproduction_notes,
     )
@@ -201,6 +206,27 @@ def build_result_package(
     )
     _register_artifact(missing_metrics_path, output_dir, "missing_metrics", "missing_metrics.json", artifacts)
 
+    metric_provenance_path = output_dir / "metric_provenance.json"
+    metric_provenance_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "1",
+                "generated_at": utc_now_iso(),
+                "metrics": metric_provenance,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _register_artifact(
+        metric_provenance_path,
+        output_dir,
+        "metric_provenance",
+        "metric_provenance.json",
+        artifacts,
+    )
+
     readme_path = output_dir / "README_result.md"
     readme_path.write_text(_render_readme(manifest), encoding="utf-8")
     _register_artifact(readme_path, output_dir, "readme", "README_result.md", artifacts)
@@ -217,6 +243,7 @@ def build_result_package(
         output_dir=output_dir,
         manifest_path=manifest_path,
         missing_metrics_path=missing_metrics_path,
+        metric_provenance_path=metric_provenance_path,
         readme_path=readme_path,
         artifact_count=len(artifacts),
     )
@@ -495,6 +522,113 @@ def _collect_missing_metrics(summary_rows: list[dict[str, str]], raw_files: list
     return sorted(missing)
 
 
+def _collect_metric_provenance(
+    summary_rows: list[dict[str, str]], raw_files: list[Path]
+) -> dict[str, dict[str, list[str]]]:
+    collected: dict[str, dict[str, set[str]]] = {}
+    for row in summary_rows:
+        _merge_metric_provenance_value(collected, row.get("metric_provenance"))
+        _merge_metric_source_types(collected, row.get("metric_source_types"))
+        _merge_unavailable_reasons(collected, row.get("unavailable_metric_reasons"))
+    for raw_file in raw_files:
+        with raw_file.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                _merge_metric_provenance_value(collected, payload.get("metric_provenance"))
+    return {
+        metric: {
+            "source_types": sorted(values["source_types"]),
+            "measurement_methods": sorted(values["measurement_methods"]),
+            "unavailable_reasons": sorted(values["unavailable_reasons"]),
+        }
+        for metric, values in sorted(collected.items())
+    }
+
+
+def _merge_metric_provenance_value(
+    collected: dict[str, dict[str, set[str]]], value: Any
+) -> None:
+    if value is None or value == "":
+        return
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return
+    if not isinstance(value, dict):
+        return
+    for metric, details in value.items():
+        if not isinstance(details, dict):
+            continue
+        entry = _metric_provenance_entry(collected, str(metric))
+        for source_type in _as_list(details.get("source_types") or details.get("source_type")):
+            entry["source_types"].add(str(source_type))
+        for method in _as_list(
+            details.get("measurement_methods") or details.get("measurement_method")
+        ):
+            entry["measurement_methods"].add(str(method))
+        if details.get("available") is False and details.get("missing_reason"):
+            entry["unavailable_reasons"].add(str(details["missing_reason"]))
+        for reason in _as_list(details.get("unavailable_reasons")):
+            entry["unavailable_reasons"].add(str(reason))
+
+
+def _merge_metric_source_types(
+    collected: dict[str, dict[str, set[str]]], value: str | None
+) -> None:
+    if not value:
+        return
+    for piece in value.split(";"):
+        if ":" not in piece:
+            continue
+        metric, source_types = piece.split(":", 1)
+        entry = _metric_provenance_entry(collected, metric)
+        for source_type in source_types.split(","):
+            if source_type.strip():
+                entry["source_types"].add(source_type.strip())
+
+
+def _merge_unavailable_reasons(
+    collected: dict[str, dict[str, set[str]]], value: str | None
+) -> None:
+    if not value:
+        return
+    for piece in value.split(";"):
+        if ":" not in piece:
+            continue
+        metric, reasons = piece.split(":", 1)
+        entry = _metric_provenance_entry(collected, metric)
+        for reason in reasons.split(" | "):
+            if reason.strip():
+                entry["unavailable_reasons"].add(reason.strip())
+
+
+def _metric_provenance_entry(
+    collected: dict[str, dict[str, set[str]]], metric: str
+) -> dict[str, set[str]]:
+    return collected.setdefault(
+        metric,
+        {
+            "source_types": set(),
+            "measurement_methods": set(),
+            "unavailable_reasons": set(),
+        },
+    )
+
+
+def _as_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
 def _split_missing_metrics(value: Any) -> set[str]:
     if value is None:
         return set()
@@ -534,6 +668,7 @@ def _render_readme(manifest: ResultPackageManifest) -> str:
         "## Reproducibility Notes\n\n"
         "- `run_manifest.json` contains package-relative paths and hashes.\n"
         "- `missing_metrics.json` explains unavailable metrics instead of treating them as zero.\n"
+        "- `metric_provenance.json` records whether metrics are observed, reported, imported, derived, or estimated.\n"
         "- Config snapshots are redacted before packaging.\n"
         "- Do not publish mock metrics as real endpoint results.\n"
         "- Do not publish private endpoint URLs, secrets, or private workload data.\n"

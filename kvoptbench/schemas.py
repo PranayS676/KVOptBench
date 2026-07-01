@@ -91,6 +91,51 @@ class QualityResult(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
+MetricSourceType = Literal[
+    "client_observed",
+    "provider_reported",
+    "engine_reported",
+    "gpu_reported",
+    "imported",
+    "derived",
+    "estimated",
+]
+
+
+class MetricProvenance(BaseModel):
+    """Explain where a metric came from and why it may be unavailable."""
+
+    source_type: MetricSourceType
+    measurement_method: str
+    available: bool = True
+    unit: str | None = None
+    provider_field: str | None = None
+    missing_reason: str | None = None
+    notes: str | None = None
+
+    @field_validator("measurement_method")
+    @classmethod
+    def _non_empty_method(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("must be a non-empty string")
+        return value.strip()
+
+
+class RunEnvironmentSnapshot(BaseModel):
+    """Reproducibility metadata captured once per experiment run."""
+
+    python_version: str
+    platform: str
+    platform_release: str | None = None
+    platform_machine: str | None = None
+    kvoptbench_version: str
+    git_commit: str | None = None
+    git_branch: str | None = None
+    git_dirty: bool | None = None
+    package_versions: dict[str, str] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class ToolCallRecord(BaseModel):
     """Structured tool-call output captured from OpenAI-compatible responses."""
 
@@ -241,6 +286,8 @@ class RequestResult(BaseModel):
     created_at: str = Field(default_factory=utc_now_iso)
     token_count_method: str = "char_approx_4"
     missing_metrics: list[str] = Field(default_factory=list)
+    metric_provenance: dict[str, MetricProvenance] = Field(default_factory=dict)
+    environment: RunEnvironmentSnapshot | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

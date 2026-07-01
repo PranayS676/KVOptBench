@@ -28,6 +28,7 @@ def test_result_package_collects_artifacts_and_provenance(tmp_path: Path) -> Non
 
     manifest_path = output_dir / "run_manifest.json"
     missing_metrics_path = output_dir / "missing_metrics.json"
+    metric_provenance_path = output_dir / "metric_provenance.json"
     readme_path = output_dir / "README_result.md"
     raw_sample_path = output_dir / "samples" / "raw_results_sample.jsonl"
     workload_sample_path = output_dir / "samples" / "qasper_shared_sample.jsonl"
@@ -36,6 +37,7 @@ def test_result_package_collects_artifacts_and_provenance(tmp_path: Path) -> Non
     assert package.manifest_path == manifest_path
     assert manifest_path.exists()
     assert missing_metrics_path.exists()
+    assert metric_provenance_path.exists()
     assert readme_path.exists()
     assert raw_sample_path.exists()
     assert workload_sample_path.exists()
@@ -57,9 +59,17 @@ def test_result_package_collects_artifacts_and_provenance(tmp_path: Path) -> Non
     assert str(tmp_path) not in manifest_text
     assert "cache_hit_rate" in missing_metrics_path.read_text(encoding="utf-8")
     assert "gpu_memory_peak_gb" in missing_metrics_path.read_text(encoding="utf-8")
+    metric_provenance = json.loads(metric_provenance_path.read_text(encoding="utf-8"))
+    assert metric_provenance["metrics"]["ttft_ms"]["source_types"] == ["client_observed"]
+    assert (
+        metric_provenance["metrics"]["gpu_memory_peak_gb"]["unavailable_reasons"]
+        == ["GPU telemetry was not collected for this run."]
+    )
+    assert manifest["metric_provenance"]["ttft_ms"]["source_types"] == ["client_observed"]
     assert "Do not publish mock metrics as real endpoint results" in readme_path.read_text(
         encoding="utf-8"
     )
+    assert "metric_provenance.json" in readme_path.read_text(encoding="utf-8")
 
     redacted_config = yaml.safe_load(redacted_config_path.read_text(encoding="utf-8"))
     assert redacted_config["base_url"] == "<redacted_url>"
@@ -130,6 +140,21 @@ def _write_package_inputs(tmp_path: Path) -> dict[str, Path]:
             "e2e_latency_ms": 420.0,
             "success": True,
             "missing_metrics": ["cache_hit_rate", "gpu_memory_peak_gb"],
+            "metric_provenance": {
+                "ttft_ms": {
+                    "source_type": "client_observed",
+                    "measurement_method": "stream timing",
+                    "unit": "ms",
+                    "available": True,
+                },
+                "gpu_memory_peak_gb": {
+                    "source_type": "gpu_reported",
+                    "measurement_method": "GPU telemetry adapter",
+                    "unit": "GB",
+                    "available": False,
+                    "missing_reason": "GPU telemetry was not collected for this run.",
+                },
+            },
         }
     ]
     raw_file = raw_dir / "qasper_cache.jsonl"
@@ -151,6 +176,8 @@ def _write_package_inputs(tmp_path: Path) -> dict[str, Path]:
                 "successes",
                 "success_rate",
                 "missing_metrics",
+                "metric_source_types",
+                "unavailable_metric_reasons",
             ],
         )
         writer.writeheader()
@@ -167,6 +194,10 @@ def _write_package_inputs(tmp_path: Path) -> dict[str, Path]:
                 "successes": "1",
                 "success_rate": "1.0",
                 "missing_metrics": "cache_hit_rate;gpu_memory_peak_gb",
+                "metric_source_types": "ttft_ms:client_observed;gpu_memory_peak_gb:gpu_reported",
+                "unavailable_metric_reasons": (
+                    "gpu_memory_peak_gb:GPU telemetry was not collected for this run."
+                ),
             }
         )
 

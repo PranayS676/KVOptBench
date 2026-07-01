@@ -50,10 +50,15 @@ The project currently includes:
 - public dataset adapters for QASPER, Project Gutenberg, LongBench, BEIR SciFact, and BFCL
 - vLLM and SGLang command previews
 - real endpoint health checks and runner support
+- request-level metric provenance and environment snapshots
+- deterministic repeated-run scheduling helpers
+- repeated-run statistical comparison helpers
+- offline Prometheus, DCGM, and `nvidia-smi` telemetry parsers
+- vLLM bench import foundations
 - cache, prefix-overlap, prefill/decode, long-context, KV quantization, KV offload, speculative decoding, and disaggregation comparisons
 - public example bundle and report templates
-- evidence-based strategy advisor
-- reproducible result-package generation with artifact hashes, samples, provenance, and missing-metric notes
+- evidence-based strategy advisor with confidence rationale and follow-up experiment guidance
+- reproducible result-package generation with artifact hashes, samples, metric provenance, and missing-metric notes
 
 Real endpoint result collection is the next major validation step.
 
@@ -208,6 +213,13 @@ GPU type, workload hash, config hash, and `missing_metrics`.
 Official results should also document metric provenance, randomized condition order,
 repeated trials, confidence intervals when available, and whether every recommendation is
 official or exploratory.
+
+The reusable Python helpers for these foundations are available in:
+
+- `kvoptbench.runner.schedule` for deterministic repeated-run schedules.
+- `kvoptbench.analysis.statistics` for repeated-trial aggregation and percent-delta comparisons.
+- `kvoptbench.telemetry.prometheus` and `kvoptbench.telemetry.nvidia_smi` for offline telemetry parsing.
+- `kvoptbench.importers.vllm_bench` for importing vLLM bench artifacts into KVOptBench-like rows.
 
 ## Real/Public Dataset Packs
 
