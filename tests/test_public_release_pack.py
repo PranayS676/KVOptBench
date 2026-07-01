@@ -147,8 +147,10 @@ def test_public_release_templates_have_required_publication_sections() -> None:
         "Run Identity",
         "Environment",
         "Backend Launch",
+        "Benchmark Methodology",
         "Workloads",
         "Artifacts",
+        "Metric Provenance",
         "Strategy Advisor",
         "missing_metrics",
         "Model Revision",
@@ -167,6 +169,14 @@ def test_public_release_templates_have_required_publication_sections() -> None:
         "Known limitations",
         "Engine-reported cache hit rate",
         "Cache hit proxy",
+        "source_type",
+        "measurement_method",
+        "Run order",
+        "Randomization seed",
+        "Repetition count",
+        "Confidence interval",
+        "Effect size",
+        "Advisor confidence",
     ]:
         assert required in result_text
 
@@ -194,6 +204,8 @@ def test_public_readiness_files_do_not_expose_internal_placeholders() -> None:
         Path("ROADMAP.md"),
         Path("AGENTS.md"),
         Path("CITATION.cff"),
+        Path("guides/benchmark_validity.md"),
+        Path("guides/metric_provenance.md"),
         Path("guides/reproducibility.md"),
         Path("guides/real_endpoint_vllm_sglang.md"),
         Path("guides/runpod.md"),
@@ -208,7 +220,55 @@ def test_public_readiness_files_do_not_expose_internal_placeholders() -> None:
     assert "YOUR_USERNAME" not in combined
     assert "C:\\Users" not in combined
     assert "OneDrive" not in combined
+    assert "KVOptBench_Strategic_Direction_Memo.docx" not in combined
     assert "https://github.com/PranayS676/KVOptBench" in combined
+
+
+def test_benchmark_methodology_guides_define_validity_and_metric_provenance() -> None:
+    validity = Path("guides/benchmark_validity.md").read_text(encoding="utf-8")
+    provenance = Path("guides/metric_provenance.md").read_text(encoding="utf-8")
+    first_real = Path("guides/first_real_benchmark.md").read_text(encoding="utf-8")
+    real_endpoint = Path("guides/real_endpoint_vllm_sglang.md").read_text(encoding="utf-8")
+    reproducibility = Path("guides/reproducibility.md").read_text(encoding="utf-8")
+    readme = Path("README.md").read_text(encoding="utf-8")
+
+    for required in [
+        "What KVOptBench Can Claim",
+        "What KVOptBench Refuses To Claim",
+        "Exploratory vs Publishable Results",
+        "Mock results validate the pipeline",
+        "Synthetic workloads are smoke tests",
+        "Failed requests stay in the result package",
+        "random-prefix controls",
+        "randomized condition order",
+        "repeated trials",
+        "confidence intervals",
+    ]:
+        assert required in validity
+
+    for required in [
+        "client_observed",
+        "provider_reported",
+        "engine_reported",
+        "gpu_reported",
+        "imported",
+        "derived",
+        "estimated",
+        "estimated_output_tokens",
+        "provider_completion_tokens",
+        "cache_hit_proxy",
+        "engine_reported_cache_hit_rate",
+        "metric_provenance",
+    ]:
+        assert required in provenance
+
+    assert "guides/benchmark_validity.md" in readme
+    assert "guides/metric_provenance.md" in readme
+    assert "randomized condition order" in first_real
+    assert "repeated trials" in first_real
+    assert "Prometheus" in real_endpoint
+    assert "nvidia-smi" in real_endpoint
+    assert "official or exploratory" in reproducibility
 
 
 def test_dataset_docs_define_public_workload_pack_and_adapter_contract() -> None:

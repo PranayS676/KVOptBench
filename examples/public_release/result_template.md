@@ -36,6 +36,25 @@ Use this template for real endpoint publications. Do not publish mock metrics as
 - Auth method, without secret values:
 - Metrics endpoint:
 
+## Benchmark Methodology
+
+- Result status: official / exploratory
+- Run order:
+- Randomization seed:
+- Repetition count:
+- Warmup policy:
+- Cold/warm pass order:
+- Control workloads:
+- Shared-prefix controls:
+- Random-prefix controls:
+- Request ordering policy:
+- Timeout policy:
+- Retry policy:
+- Confidence interval method:
+- Effect size method:
+- Quality gate:
+- Publishable claim limitations:
+
 ## Workloads
 
 - Workload profiles:
@@ -64,8 +83,6 @@ Use this template for real endpoint publications. Do not publish mock metrics as
 - Request rate:
 - Max tasks:
 - Streamed responses: yes/no
-- Cold/warm pass order:
-- Randomization seed:
 
 ## Artifacts
 
@@ -111,12 +128,34 @@ Use this template for real endpoint publications. Do not publish mock metrics as
 - Quality score:
 - `missing_metrics`:
 
+## Metric Provenance
+
+- `metric_provenance` file:
+- `source_type` values used:
+- `measurement_method` values used:
+- Client-observed metrics:
+- Provider-reported metrics:
+- Engine-reported metrics:
+- GPU-reported metrics:
+- Imported metrics:
+- Derived metrics:
+- Estimated metrics:
+- `estimated_input_tokens` method:
+- `estimated_output_tokens` method:
+- `provider_completion_tokens` availability:
+- `engine_reported_cache_hit_rate` source:
+- `cache_hit_proxy` derivation:
+- Missing metric confidence impact:
+- Confidence interval:
+- Effect size:
+
 ## Strategy Advisor
 
 - Overall recommendation:
 - Recommended strategies:
 - Strategies to consider:
 - Inconclusive strategies:
+- Advisor confidence:
 - Caveats:
 - Next experiments:
 
@@ -147,6 +186,7 @@ kvoptbench report --input results/summary.csv --strategy-input reports/outputs/s
 - Do not publish mock metrics as real endpoint results.
 - Do not treat missing telemetry as zero.
 - Do not present `cache_hit_proxy` as an engine-reported cache metric.
+- Do not present estimated token counts as provider-reported token counts.
 - Do not publish credentials, private endpoint URLs, private model paths, or private user data.
 - Do not publish real dataset results without dataset source, adapter, manifest, and hash metadata.
 - Do not compare runs directly unless model revision, engine version, tokenizer, prompt template,

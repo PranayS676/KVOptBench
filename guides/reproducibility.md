@@ -115,6 +115,27 @@ Before publishing real endpoint results, record:
 - summary CSV and comparison CSV hashes
 - `missing_metrics` values
 - whether the run is official or exploratory
+- metric provenance for measured, reported, imported, derived, and estimated values
+- randomized condition order and seed
+- repeated trials and run count
+- confidence intervals or a documented reason they are unavailable
+- effect size for each strategy comparison
+
+## Official Or Exploratory Results
+
+Every public package should state whether the run is official or exploratory.
+
+Official results should include public dataset manifests, random-prefix controls,
+environment capture, metric provenance, randomized condition order, repeated trials,
+quality results, failed requests, and missing telemetry notes.
+
+Exploratory results are still useful, but they should be labeled clearly. Examples include
+mock runs, synthetic smoke tests, single-run endpoint checks, runs without repeated trials,
+or runs where important engine or GPU telemetry is missing.
+
+Failed requests, timeouts, unavailable telemetry, and quality failures should stay in the
+result package. Removing them makes the run harder to reproduce and can make a strategy
+look safer than it is.
 
 RunPod is not required for the public example bundle. Use `guides/first_real_benchmark.md`
 when you are ready to collect the first real endpoint result package. Use `guides/runpod.md`

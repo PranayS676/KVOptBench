@@ -61,6 +61,10 @@ Public dataset preparation is documented separately from synthetic workload gene
 For real frontier-model testing, use the dataset guide, adapter contract, and generated
 manifests before publishing cache, long-context, RAG, or tool-calling claims.
 
+Benchmark validity and metric provenance are part of the public contract. Before
+publishing results, read `guides/benchmark_validity.md` and
+`guides/metric_provenance.md`.
+
 ## Install
 
 ```bash
@@ -201,6 +205,10 @@ kvoptbench engine-command --engine sglang --strategy cache_off --model-id your/m
 For official real endpoint results, record the exact backend command, engine version, model revision,
 GPU type, workload hash, config hash, and `missing_metrics`.
 
+Official results should also document metric provenance, randomized condition order,
+repeated trials, confidence intervals when available, and whether every recommendation is
+official or exploratory.
+
 ## Real/Public Dataset Packs
 
 Synthetic generators are useful for smoke tests, but credible public results should use
@@ -317,6 +325,8 @@ dataset rights, private prompt exposure, and endpoint metadata.
 
 ## Guides
 
+- `guides/benchmark_validity.md`
+- `guides/metric_provenance.md`
 - `guides/reproducibility.md`
 - `guides/real_endpoint_vllm_sglang.md`
 - `guides/runpod.md`
