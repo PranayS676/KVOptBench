@@ -143,6 +143,7 @@ def _check_telemetry(config: ExperimentConfig) -> DoctorCheck:
             message="Telemetry is disabled; missing backend metrics will remain null.",
         )
     details: dict[str, Any] = {
+        "profile": telemetry.profile,
         "prometheus_sources": len(telemetry.prometheus),
         "lmcache_sources": len(telemetry.lmcache),
         "gpu_enabled": telemetry.gpu.enabled if telemetry.gpu is not None else False,

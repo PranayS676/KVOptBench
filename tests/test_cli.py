@@ -37,6 +37,29 @@ def test_engine_command_cli_prints_preview_without_launching() -> None:
     assert "does not launch" in result.stdout
 
 
+def test_telemetry_profile_cli_lists_and_exports_profiles() -> None:
+    runner = CliRunner()
+
+    list_result = runner.invoke(app, ["telemetry-profile", "list"])
+
+    assert list_result.exit_code == 0
+    assert "vllm_live" in list_result.stdout
+    assert "gpu_only" in list_result.stdout
+
+    show_result = runner.invoke(
+        app,
+        ["telemetry-profile", "show", "--profile", "vllm_live", "--json"],
+    )
+
+    assert show_result.exit_code == 0
+    payload = json.loads(show_result.stdout)
+    assert payload["name"] == "vllm_live"
+    assert payload["telemetry"]["prometheus"][0]["name"] == "vllm"
+    assert "engine_reported_cache_hit_rate" in payload["telemetry"]["prometheus"][0][
+        "expected_metrics"
+    ]
+
+
 def test_cache_plan_cli_writes_yaml_configs(tmp_path) -> None:
     runner = CliRunner()
 

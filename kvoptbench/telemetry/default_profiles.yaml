@@ -1,0 +1,140 @@
+profiles:
+  gpu_only:
+    description: Live GPU memory sampling without engine or cache telemetry.
+    telemetry:
+      enabled: true
+      output_dir: results/telemetry
+      gpu:
+        enabled: true
+        provider: nvidia_smi
+        sample_interval_seconds: 1
+        expected_metrics:
+          - gpu_memory_used_gb
+          - gpu_memory_peak_gb
+    notes:
+      - Use this profile when an OpenAI-compatible endpoint has no metrics endpoint.
+      - GPU telemetry remains unavailable on machines without nvidia-smi.
+
+  vllm_live:
+    description: vLLM Prometheus scrape plus live GPU memory sampling.
+    telemetry:
+      enabled: true
+      output_dir: results/telemetry
+      prometheus:
+        - name: vllm
+          url: http://127.0.0.1:8000/metrics
+          timeout_seconds: 2
+          scrape_phases: [before_run, during_run, after_run]
+          scrape_interval_seconds: 1
+          expected_metrics:
+            - engine_reported_cache_hit_rate
+            - vllm:num_requests_running
+            - vllm:num_requests_waiting
+          metric_aliases:
+            "vllm:prefix_cache_hit_rate": engine_reported_cache_hit_rate
+            "vllm:gpu_cache_usage_perc": engine_reported_gpu_cache_usage
+      gpu:
+        enabled: true
+        provider: nvidia_smi
+        sample_interval_seconds: 1
+        expected_metrics:
+          - gpu_memory_used_gb
+          - gpu_memory_peak_gb
+    notes:
+      - Override telemetry.prometheus[0].url when vLLM metrics run on a different host or port.
+      - Missing Prometheus metrics are preserved as null rather than guessed.
+
+  sglang_live:
+    description: SGLang Prometheus scrape plus live GPU memory sampling.
+    telemetry:
+      enabled: true
+      output_dir: results/telemetry
+      prometheus:
+        - name: sglang
+          url: http://127.0.0.1:30000/metrics
+          timeout_seconds: 2
+          scrape_phases: [before_run, during_run, after_run]
+          scrape_interval_seconds: 1
+          expected_metrics:
+            - engine_reported_cache_hit_rate
+            - sglang:num_running_reqs
+            - sglang:num_queue_reqs
+          metric_aliases:
+            "sglang:cache_hit_rate": engine_reported_cache_hit_rate
+            "sglang:prefix_cache_hit_rate": engine_reported_cache_hit_rate
+      gpu:
+        enabled: true
+        provider: nvidia_smi
+        sample_interval_seconds: 1
+        expected_metrics:
+          - gpu_memory_used_gb
+          - gpu_memory_peak_gb
+    notes:
+      - Override metric_aliases if your SGLang version exposes different metric names.
+
+  lmcache_live:
+    description: LMCache telemetry plus live GPU memory sampling.
+    telemetry:
+      enabled: true
+      output_dir: results/telemetry
+      lmcache:
+        - name: lmcache
+          url: http://127.0.0.1:9000/metrics
+          format: prometheus
+          timeout_seconds: 2
+          scrape_phases: [before_run, during_run, after_run]
+          scrape_interval_seconds: 1
+          expected_metrics:
+            - lmcache_cache_hit_rate
+            - lmcache_cache_hits
+            - lmcache_cache_misses
+            - lmcache_kv_transfer_bytes
+      gpu:
+        enabled: true
+        provider: nvidia_smi
+        sample_interval_seconds: 1
+        expected_metrics:
+          - gpu_memory_used_gb
+          - gpu_memory_peak_gb
+    notes:
+      - Use telemetry.lmcache[0].path with format json or jsonl for offline LMCache exports.
+
+  vllm_lmcache_live:
+    description: vLLM Prometheus, LMCache telemetry, and live GPU memory sampling.
+    telemetry:
+      enabled: true
+      output_dir: results/telemetry
+      prometheus:
+        - name: vllm
+          url: http://127.0.0.1:8000/metrics
+          timeout_seconds: 2
+          scrape_phases: [before_run, during_run, after_run]
+          scrape_interval_seconds: 1
+          expected_metrics:
+            - engine_reported_cache_hit_rate
+            - vllm:num_requests_running
+            - vllm:num_requests_waiting
+          metric_aliases:
+            "vllm:prefix_cache_hit_rate": engine_reported_cache_hit_rate
+            "vllm:gpu_cache_usage_perc": engine_reported_gpu_cache_usage
+      lmcache:
+        - name: lmcache
+          url: http://127.0.0.1:9000/metrics
+          format: prometheus
+          timeout_seconds: 2
+          scrape_phases: [before_run, during_run, after_run]
+          scrape_interval_seconds: 1
+          expected_metrics:
+            - lmcache_cache_hit_rate
+            - lmcache_cache_hits
+            - lmcache_cache_misses
+            - lmcache_kv_transfer_bytes
+      gpu:
+        enabled: true
+        provider: nvidia_smi
+        sample_interval_seconds: 1
+        expected_metrics:
+          - gpu_memory_used_gb
+          - gpu_memory_peak_gb
+    notes:
+      - Use this profile when vLLM is the serving engine and LMCache provides cache/offload telemetry.

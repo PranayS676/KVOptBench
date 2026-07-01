@@ -16,9 +16,11 @@ app = typer.Typer(help="KVOptBench cache-aware LLM inference benchmark.")
 dataset_app = typer.Typer(help="Prepare public dataset workloads.")
 workflow_app = typer.Typer(help="Run end-to-end benchmark workflows.")
 schema_app = typer.Typer(help="Export and check artifact contract schemas.")
+telemetry_profile_app = typer.Typer(help="Inspect reusable telemetry profile defaults.")
 app.add_typer(dataset_app, name="dataset")
 app.add_typer(workflow_app, name="workflow")
 app.add_typer(schema_app, name="schema")
+app.add_typer(telemetry_profile_app, name="telemetry-profile")
 
 
 @app.command("validate-config")
@@ -163,6 +165,66 @@ def schema_export_command(
     written = write_schema_files(output_dir)
     for name, path in written.items():
         print(f"[green]Wrote schema[/green] {name}: {path}")
+
+
+@telemetry_profile_app.command("list")
+def telemetry_profile_list_command(
+    profile_path: Path | None = typer.Option(
+        None,
+        "--profile-path",
+        help="Optional YAML file with additional or overriding telemetry profiles.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+) -> None:
+    """List built-in and optional user telemetry profiles."""
+    from kvoptbench.telemetry.profiles import load_telemetry_profiles, profile_to_dict
+
+    try:
+        profiles = load_telemetry_profiles(profile_path)
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    payload = {"profiles": [profile_to_dict(profile) for profile in profiles.values()]}
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2))
+        return
+    for profile in profiles.values():
+        print(f"[bold]{profile.name}[/bold] - {profile.description}")
+
+
+@telemetry_profile_app.command("show")
+def telemetry_profile_show_command(
+    profile: str = typer.Option(..., "--profile", "-p", help="Telemetry profile name."),
+    profile_path: Path | None = typer.Option(
+        None,
+        "--profile-path",
+        help="Optional YAML file with additional or overriding telemetry profiles.",
+    ),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Write the profile to a file."),
+    json_output: bool = typer.Option(False, "--json", help="Emit JSON instead of YAML."),
+) -> None:
+    """Show one telemetry profile as reusable config."""
+    import yaml
+
+    from kvoptbench.telemetry.profiles import get_telemetry_profile, profile_to_dict
+
+    try:
+        selected = get_telemetry_profile(profile, profile_path=profile_path)
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    payload = profile_to_dict(selected)
+    text = (
+        json.dumps(payload, indent=2) + "\n"
+        if json_output
+        else yaml.safe_dump(payload, sort_keys=False)
+    )
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(text, encoding="utf-8")
+        print(f"[green]Wrote telemetry profile[/green] {output}")
+        return
+    typer.echo(text, nl=False)
 
 
 @workflow_app.command("run")

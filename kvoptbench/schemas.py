@@ -167,11 +167,23 @@ class TelemetryConfig(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+    profile: str | None = None
+    profile_path: Path | None = None
     enabled: bool = False
     output_dir: Path | None = None
     prometheus: list[PrometheusTelemetrySource] = Field(default_factory=list)
     gpu: GpuTelemetryConfig | None = None
     lmcache: list[LmcacheTelemetrySource] = Field(default_factory=list)
+
+    @field_validator("profile")
+    @classmethod
+    def _optional_profile_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("must be a non-empty string")
+        return stripped
 
 
 class QualityResult(BaseModel):

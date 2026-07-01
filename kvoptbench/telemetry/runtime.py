@@ -29,6 +29,7 @@ class TelemetryRunSummary(BaseModel):
     schema_version: str = "1"
     run_id: str
     enabled: bool
+    telemetry_profile: str | None = None
     started_at: str | None = None
     finished_at: str | None = None
     output_dir: str | None = None
@@ -153,6 +154,7 @@ class TelemetryRunCollector:
         return TelemetryRunSummary(
             run_id=self.run_id,
             enabled=self.enabled,
+            telemetry_profile=self.config.profile if self.config is not None else None,
             started_at=self._started_at,
             finished_at=self._finished_at,
             output_dir=self.run_dir.as_posix() if self.run_dir else None,
