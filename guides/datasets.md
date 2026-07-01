@@ -154,7 +154,7 @@ The broader first dataset pack should be implemented in this order:
    - Shape: selected English tasks such as `qasper`, `multifieldqa_en`,
      `hotpotqa`, `passage_retrieval_en`, and `repobench-p`.
    - Output: `workloads/generated/longbench_core.jsonl`.
-   - Evaluator: task-specific placeholder first, stronger metrics later.
+   - Evaluator: `longbench_answer` for answer-bearing QA/retrieval tasks.
    - Key metadata: `dataset=longbench`, `subset`, `language`, `length`,
      `original_id`, `task_type`.
 
@@ -162,7 +162,7 @@ The broader first dataset pack should be implemented in this order:
    - Purpose: retrieval-grounded prompts and answer faithfulness.
    - Shape: query plus selected passages, expected answer/qrels, and citation requirement.
    - Output: `workloads/generated/rag_public_small.jsonl`.
-   - Evaluator: `rag_placeholder` first, future citation/evidence evaluator later.
+   - Evaluator: `rag_source_match` when expected source IDs or qrels are available.
    - Key metadata: `dataset`, `query_id`, `doc_ids`, `qrels`, `retrieval_source`,
      `source_revision`.
 
@@ -222,6 +222,7 @@ The implemented adapter:
 - preserves original fields such as `input`, `context`, `answers`, `length`,
   `dataset`, `language`, and `_id` in metadata
 - maps `context` into the prompt body and `answers` into expected answers
+- emits `longbench_answer` so answer-bearing tasks get exact/contains/token-F1 scoring
 - records the subtask because evaluation differs by task
 - records any truncation or context-bucket selection
 
@@ -244,13 +245,15 @@ adapter:
 - records document IDs and query IDs
 - preserves qrels or expected answer references
 - writes prompts that require grounded answers and citations
+- emits `rag_source_match` so source IDs become part of the quality score
 - supports a tiny smoke subset for CI fixtures
 
 Natural Questions is recommended for future RAG coverage, but it is not implemented yet.
 
 ### Code And Tool Datasets
 
-BFCL is implemented for a first tool-calling smoke path. SWE-bench, CodeSearchNet,
+BFCL is implemented for a first tool-calling smoke path and emits `bfcl_tool_call`
+with expected function name and required argument fields. SWE-bench, CodeSearchNet,
 API-Bank, and ToolBench remain useful future extensions with heavier setup, richer
 evaluation needs, and more licensing or redistribution details.
 
@@ -304,8 +307,9 @@ fields such as `cache_hit_proxy`, and unavailable metrics must remain `null` and
 in `missing_metrics`.
 
 Quality checks should exist from the first public run. Use `contains_expected`,
-`exact_match`, `needle`, and `json_validity` where applicable, then mark richer RAG,
-tool-call, or LLM-judge scoring as placeholder until implemented.
+`exact_match`, `needle`, `qasper_answer`, `longbench_answer`, `rag_source_match`,
+`bfcl_tool_call`, `json_validity`, and `json_schema` where applicable. Keep
+LLM-judge scoring optional and clearly labeled unless the user configures a real judge.
 
 ## Publication Checklist
 

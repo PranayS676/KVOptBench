@@ -125,6 +125,7 @@ def _generate_items(
             exclusions.append("missing_expected_tool")
             continue
         openai_tools = _openai_tools(tools)
+        required_arguments = _required_arguments(openai_tools, expected_tool)
         tools_text = json.dumps(tools, ensure_ascii=False, sort_keys=True)
         prompt = BFCL_TEMPLATE.format(tools=tools_text, request=request)
         measured_input_tokens = count_tokens(prompt, options.token_count_method)
@@ -141,7 +142,7 @@ def _generate_items(
                 target_output_tokens=options.target_output_tokens,
                 prefix_group_id=None,
                 shared_prefix_tokens=0,
-                eval_type="tool_calling",
+                eval_type="bfcl_tool_call",
                 metadata={
                     "dataset": "bfcl",
                     "source": "bfcl",
@@ -154,6 +155,8 @@ def _generate_items(
                     "source_document_id": record_id,
                     "source_question_id": record_id,
                     "expected_tool": expected_tool,
+                    "expected_function_name": expected_tool,
+                    "required_arguments": required_arguments,
                     "openai_tools": openai_tools,
                     "tool_choice": "auto",
                     "tool_count": len(tools),
@@ -177,8 +180,8 @@ def _generate_items(
                     "truncation_policy": "none",
                     "excluded_reason": None,
                     "answer_type": "tool_name",
-                    "evaluator": "tool_calling",
-                    "evaluator_version": "0.2.0",
+                    "evaluator": "bfcl_tool_call",
+                    "evaluator_version": "0.3.0",
                     "redistributable_prompt": False,
                     "redistributable_output": False,
                     "rights_note": "Use upstream BFCL dataset terms and attribution.",
@@ -341,6 +344,23 @@ def _expected_tool(record: dict[str, Any]) -> str | None:
             if value not in (None, ""):
                 return str(value)
     return None
+
+
+def _required_arguments(openai_tools: list[dict[str, Any]], expected_tool: str | None) -> list[str]:
+    for tool in openai_tools:
+        function = tool.get("function")
+        if not isinstance(function, dict):
+            continue
+        if expected_tool is not None and function.get("name") != expected_tool:
+            continue
+        parameters = function.get("parameters")
+        if not isinstance(parameters, dict):
+            return []
+        required = parameters.get("required")
+        if isinstance(required, list):
+            return [str(value) for value in required if str(value).strip()]
+        return []
+    return []
 
 
 def _license_review_status(options: DatasetPrepareOptions) -> str:

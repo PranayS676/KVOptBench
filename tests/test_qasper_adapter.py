@@ -44,6 +44,7 @@ def test_qasper_shared_prefix_adapter_writes_valid_workload_and_manifest(tmp_pat
     assert len({item.prefix_group_id for item in alpha_items}) == 1
     assert len({item.metadata["prefix_hash"] for item in alpha_items}) == 1
     assert all(item.shared_prefix_tokens > 0 for item in items)
+    assert all(item.eval_type == "qasper_answer" for item in items)
     assert all(item.metadata["prompt_hash"] for item in items)
     assert all(item.metadata["measured_input_tokens"] > 0 for item in items)
     assert all(item.metadata["redistributable_prompt"] is False for item in items)

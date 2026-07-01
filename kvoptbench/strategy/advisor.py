@@ -232,23 +232,26 @@ METRIC_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 QUALITY_EVALUATOR_ALIASES: dict[str, tuple[str, ...]] = {
-    "answer_relevance": ("answer_relevance", "rag_placeholder", "rag"),
-    "factuality": ("factuality", "faithfulness", "rag_placeholder"),
+    "answer_relevance": ("answer_relevance", "rag_placeholder", "rag", "rag_source_match"),
+    "factuality": ("factuality", "faithfulness", "rag_placeholder", "rag_source_match"),
     "answer_correctness": (
         "answer_correctness",
         "contains_expected",
         "needle",
         "exact_match",
+        "qasper_answer",
+        "longbench_answer",
     ),
-    "tool_selection_validity": ("tool_calling", "tool_selection_validity"),
-    "argument_validity": ("tool_calling", "argument_validity"),
+    "tool_selection_validity": ("tool_calling", "tool_selection_validity", "bfcl_tool_call"),
+    "argument_validity": ("tool_calling", "argument_validity", "bfcl_tool_call"),
     "task_success": (
         "task_success",
         "tool_calling",
+        "bfcl_tool_call",
         "llm_judge_placeholder",
     ),
     "test_outcome": ("test_outcome", "unit_test_result", "llm_judge_placeholder"),
-    "output_validity": ("output_validity", "contains_expected"),
+    "output_validity": ("output_validity", "contains_expected", "json_validity", "json_schema"),
 }
 
 

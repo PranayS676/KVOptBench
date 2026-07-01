@@ -307,8 +307,8 @@ def _make_item(
         "truncation_policy": "tail" if truncated else "none",
         "excluded_reason": None,
         "answer_type": answer_type,
-        "evaluator": "contains_expected",
-        "evaluator_version": "0.1.0",
+        "evaluator": "qasper_answer",
+        "evaluator_version": "0.3.0",
         "difficulty": None,
         "prefix_overlap_ratio": prefix_overlap_ratio,
         "redistributable_prompt": False,
@@ -327,7 +327,7 @@ def _make_item(
         target_output_tokens=options.target_output_tokens,
         prefix_group_id=prefix_group_id,
         shared_prefix_tokens=shared_prefix_tokens,
-        eval_type="contains_expected",
+        eval_type="qasper_answer",
         metadata=metadata,
     )
 
